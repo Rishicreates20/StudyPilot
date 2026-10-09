@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from helpers import IsolatedSettings
+from pydantic import SecretStr
 
 from app.core.config import AppEnv
 from app.main import create_app
+from conftest import new_client
+from support.settings import valid_local_settings
 
 
 def test_healthz_reports_liveness_without_exposing_configuration(client: TestClient) -> None:
@@ -59,11 +61,16 @@ def test_api_docs_are_available_outside_production(client: TestClient) -> None:
 
 
 def test_api_docs_are_disabled_in_production() -> None:
-    production = IsolatedSettings(
+    production = valid_local_settings(
         app_env=AppEnv.PRODUCTION,
         cors_allowed_origins=["https://app.example.com"],
+        supabase_url="https://abcd.supabase.co",
+        # Nothing listens here: the pool retries in the background while the test runs.
+        database_url=SecretStr(
+            "postgresql://postgres:postgres@127.0.0.1:1/postgres?sslmode=require"
+        ),
     )
-    with TestClient(create_app(production)) as production_client:
+    with new_client(create_app(production)) as production_client:
         assert production_client.get("/docs").status_code == 404
         assert production_client.get("/openapi.json").status_code == 404
         assert production_client.get("/healthz").status_code == 200

@@ -1,0 +1,11 @@
+[project]
+name = "studypilot-test-database"
+version = "0.0.0"
+description = "A throwaway real PostgreSQL for the API test suite (not part of the application)."
+# pgserver publishes wheels for Python 3.9-3.12 only, so this tiny helper runs on 3.12 while the
+# API itself runs on 3.14. The tests talk to it over a normal TCP connection.
+requires-python = ">=3.12,<3.13"
+dependencies = ["pgserver==0.1.4"]
+
+[tool.uv]
+package = false

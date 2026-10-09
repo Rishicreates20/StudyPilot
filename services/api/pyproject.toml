@@ -8,11 +8,16 @@ dependencies = [
     "uvicorn==0.54.0",
     "pydantic-settings==2.15.0",
     "structlog==26.1.0",
+    # Database: psycopg 3 with a connection pool (explicit SQL, no ORM; see ADR-021).
+    "psycopg[binary]==3.3.6",
+    "psycopg-pool==3.3.3",
+    # Access-token verification (Supabase JWTs) and the HTTP client that fetches the signing keys.
+    "pyjwt[crypto]==2.15.1",
+    "httpx2==2.13.1",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2==2.13.1",
     "pytest==9.1.1",
     "pyright==1.1.414",
     "ruff==0.16.10",
@@ -25,21 +30,26 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+src = [".", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+# SIM117: "with session_as(...) as c:" then "with pytest.raises(...)" reads clearest nested.
+"tests/**" = ["S101", "SIM117"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "tests"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
 [tool.pyright]
+# tests/pg_server is a separate Python 3.12 helper environment (see its pyproject.toml).
 include = ["app", "tests"]
+exclude = ["tests/pg_server", "**/.venv"]
 pythonVersion = "3.14"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
+extraPaths = ["tests"]
