@@ -1,0 +1,54 @@
+# --- Secrets and local environment: never commit -------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+
+# --- OS / editor -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# --- Node / Next.js --------------------------------------------------------
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+coverage/
+playwright-report/
+test-results/
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Supabase local stack --------------------------------------------------
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# --- Docker / misc ---------------------------------------------------------
+docker-compose.override.yml
+*.log
+tmp/
+
+# --- Claude Code local settings (per-developer) ----------------------------
+.claude/settings.local.json

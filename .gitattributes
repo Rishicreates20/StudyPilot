@@ -1,0 +1,18 @@
+# Normalise line endings to LF in the repository regardless of the developer's
+# global core.autocrlf (the primary dev machine is Windows with autocrlf=true).
+# This matters for SQL migrations, shell scripts, Dockerfiles and YAML.
+* text=auto eol=lf
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.zip  binary
