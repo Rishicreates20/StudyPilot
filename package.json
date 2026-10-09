@@ -1,0 +1,34 @@
+{
+  "name": "studypilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StudyPilot — AI-powered personal learning coach (monorepo root)",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @studypilot/web",
+    "dev:api": "uv run --directory services/api python -m uvicorn app.main:create_app --factory --reload --port 8000 --no-access-log",
+    "lint": "npm run lint:web && npm run lint:api",
+    "lint:web": "npm run lint --workspace @studypilot/web",
+    "lint:api": "uv run --directory services/api python -m ruff check .",
+    "typecheck": "npm run typecheck:web && npm run typecheck:api",
+    "typecheck:web": "npm run typecheck --workspace @studypilot/web",
+    "typecheck:api": "uv run --directory services/api python -m pyright",
+    "test": "npm run test:web && npm run test:api",
+    "test:web": "npm run test --workspace @studypilot/web",
+    "test:api": "uv run --directory services/api python -m pytest",
+    "format": "prettier --write . && uv run --directory services/api python -m ruff format .",
+    "format:check": "prettier --check . && uv run --directory services/api python -m ruff format --check .",
+    "build": "npm run build --workspace @studypilot/web",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.0"
+  }
+}
