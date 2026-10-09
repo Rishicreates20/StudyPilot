@@ -1,0 +1,5 @@
+-- Development seed data, applied by `supabase db reset`.
+--
+-- Intentionally empty. Development users are created through the real sign-up flow (or the Auth
+-- admin API), never inserted here with hard-coded credentials, and no fake AI-generated learning
+-- content is ever seeded to make the product look complete.
