@@ -136,8 +136,11 @@ it unapproved.
 
 **`npm audit` reports high-severity issues.** Production dependencies are clean
 (`npm audit --omit=dev` finds 0). The dev-only findings come from `braces` (a stack-exhaustion issue
-in glob matching) inside `eslint-config-next`; npm's suggested "fix" downgrades Next.js to 14 and
-must not be applied. CI audits production dependencies only.
+in glob matching, only reachable through build-time tooling: `eslint-config-next` and the shadcn CLI);
+npm's suggested "fix" downgrades Next.js to 14 or shadcn to 1.0 and must not be applied. CI audits
+production dependencies only (`npm audit --omit=dev --audit-level=high`), so the `shadcn` package
+must stay in `devDependencies`: `shadcn init` adds it under `dependencies`, which pulls the vulnerable
+glob chain into the production tree.
 
 **Web `Invalid environment configuration` on start.** Read the variable names it lists and compare
 with the table above.

@@ -51,6 +51,8 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - Environment access goes through `src/lib/env.ts` (Zod, fail-fast); read `NEXT_PUBLIC_*` only via literal `process.env.NAME` there.
 - Use design tokens and the components in `src/components` (see `docs/DESIGN_SYSTEM.md`); never hard-code colours. Server-only tests need `// @vitest-environment node`.
 - Zod: use `z.url({ protocol: /^https?$/ })`, not `z.httpUrl()` (it rejects `localhost` and `http://api:8000`).
+- `npx shadcn init/add` puts the `shadcn` package under `dependencies`; keep it in `devDependencies` (it is only used for `@import "shadcn/tailwind.css"` at build time) or `npm audit --omit=dev` fails in CI.
+- GitHub Actions: pin exact existing tags and check them with `GET /repos/<owner>/<repo>/git/ref/tags/<tag>`; some actions (for example `astral-sh/setup-uv`) publish no floating major tag like `v10`.
 
 ## Dev-environment gotchas (primary machine: Windows 11 Home)
 
