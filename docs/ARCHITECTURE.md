@@ -342,8 +342,9 @@ All configuration is environment-based and validated at startup (Pydantic Settin
 |---|---|---|---|---|
 | `APP_ENV` | api, worker | No | M1 | `local` · `test` · `staging` · `production` |
 | `APP_NAME` / `NEXT_PUBLIC_APP_NAME` | api, web | No | M1 | Configurable product name |
+| `APP_VERSION` | api | No | M1 | Reported by `/healthz`; set from the release in deployed environments |
 | `LOG_LEVEL` | api, worker | No | M1 | Logging verbosity |
-| `CORS_ALLOWED_ORIGINS` | api | No | M1 | Comma-separated web origins |
+| `CORS_ALLOWED_ORIGINS` | api | No | M1 | Comma-separated web origins; scheme + host only; `https` required in staging/production |
 | `DATABASE_URL` | api, worker | **Yes** | M1 | Postgres connection (pooler; mode per §16) |
 | `SUPABASE_URL` | api, worker | No | M1 | Project URL |
 | `SUPABASE_JWT_MODE` | api | No | M1 | `jwks` or `hs256` |
@@ -352,7 +353,8 @@ All configuration is environment-based and validated at startup (Pydantic Settin
 | `SUPABASE_SERVICE_ROLE_KEY` | api, worker | **Yes** | M6 | Storage admin and signed URLs |
 | `NEXT_PUBLIC_SUPABASE_URL` | web | No | M1 | Auth client |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | No (public by design) | M1 | Auth client |
-| `NEXT_PUBLIC_API_BASE_URL` | web | No | M1 | FastAPI base URL |
+| `NEXT_PUBLIC_API_BASE_URL` | web | No | M1 | FastAPI base URL for the browser; compiled in at build time; required for production builds |
+| `API_INTERNAL_BASE_URL` | web (server) | No | M1 | Address server-rendered pages use to reach the API (Docker: `http://api:8000`); defaults to the public URL |
 | `LLM_PROVIDER` | api, worker | No | M3 | `gemini` · `openai` · `fake` (not allowed in staging/production) |
 | `GEMINI_API_KEY` / `OPENAI_API_KEY` | api, worker | **Yes** | M3 | Provider credential |
 | `LLM_MODEL_*` | api, worker | No | M3 | Model id per stage |
@@ -463,12 +465,15 @@ Environments: `local` → `staging` (preview/branch) → `production`. Migration
 | ADR-009 | `LLMProvider` interface, schema-constrained outputs + Pydantic re-validation; Gemini adapter first, OpenAI second; `FakeProvider` for tests only | Provider SDKs called from business logic; LangChain-style frameworks | Swappable provider, deterministic tests, no framework lock-in | Accepted (provider order: assumption A4) |
 | ADR-010 | Grading, mastery, SR scheduling and next-action are deterministic | LLM-as-judge for mastery | Reproducible, testable, no extra cost | Accepted |
 | ADR-011 | OpenAPI is the contract; generated TS types + client; CI drift check | Hand-written client types; tRPC | Prevents drift; works for Expo too | Accepted |
-| ADR-012 | Tooling: npm workspaces, `uv`, Python 3.14, Node 24, ruff, pyright, pytest, Vitest, Playwright, **TypeScript pinned to 6.0.x** | pnpm; Python 3.12; TypeScript 7 | `pnpm` isn't installed; 3.12 is blocked on the dev machine; `typescript-eslint` currently requires TypeScript below 6.1 | Accepted |
+| ADR-012 | Tooling: npm workspaces, `uv`, Python 3.14, Node 24, ruff, pyright, pytest, Vitest, Playwright, **TypeScript pinned to 6.0.x** | pnpm; Python 3.12; TypeScript 7 | `pnpm` isn't installed; 3.12 is blocked on the dev machine; `typescript-eslint` currently requires TypeScript below 6.1. **Verified in M1a:** TypeScript 6.0.3 with Next 16.4 and `typescript-eslint` 8.71.1 passes lint, type-check and build | Accepted (verified) |
 | ADR-013 | Vercel (web) + Render (API, worker) + Supabase | AWS; Fly.io; Railway | Matches the source brief; lowest ops burden for an MVP | Accepted (accounts: user) |
 | ADR-014 | Text extraction behind `TextExtractor`: `pypdf` for digital PDFs, vision-capable LLM for scans/handwriting; avoid AGPL libraries | Tesseract; PyMuPDF; cloud OCR | Handles handwriting best-effort without native binaries; permissive licences | Accepted — privacy implication documented |
 | ADR-015 | One migration per slice, with RLS and pgTAP tests in the same change | One initial 17-table migration | Policies are only trusted when tested with their table | Accepted |
 | ADR-016 | Errors as RFC 9457 problem+json; 404 for non-owned resources | Ad-hoc error shapes; 403 | Stable client handling; no ID enumeration | Accepted |
 | ADR-017 | Jobs checkpoint per stage and resume on retry | Restart from scratch | Retries must not repeat or re-bill completed stages | Accepted |
+| ADR-018 | Keep Next.js **Cache Components** and Partial Prefetching enabled (the `create-next-app` default). Anything per-request starts with `await connection()` under `<Suspense>`; live route handlers do the same | Disable Cache Components; opt out per route | It is the documented direction of Next 16 and supports streaming shells with dynamic data; dev mode surfaced the `Date.now()` rule immediately, so mistakes are loud | Accepted (verified in M1a) |
+| ADR-019 | UI foundation: shadcn/ui with **Radix** primitives ("nova" style) copied into `components/ui` and adapted to our tokens; class merging via the shadcn-maintained `cn` package | Base UI primitives; Material/Chakra; clsx + tailwind-merge | Owned, accessible, minimal-dependency components; `cn` provenance verified on npm (maintainer and repository) | Accepted |
+| ADR-020 | Python tooling is invoked as `python -m <tool>` (never the generated launcher executables); API entrypoint is `uvicorn app.main:create_app --factory`; the test-client dependency is `httpx2` | Console-script launchers; module-level `app = create_app()`; `httpx` | Smart App Control blocks the `pytest.exe` launcher that `uv` generates; `--factory` keeps imports free of side effects; Starlette 1.7 deprecates `httpx` in its TestClient in favour of `httpx2` (provenance verified) | Accepted (verified) |
 
 ## 18. Deviations from the source brief
 

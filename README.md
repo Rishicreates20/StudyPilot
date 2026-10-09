@@ -2,74 +2,94 @@
 
 An AI-powered **personal learning coach**. A learner states a goal (a topic, an exam, a certification) or provides study material; StudyPilot builds a personalised roadmap, teaches each topic with structured lessons, tests understanding with quizzes, finds weak spots, and adapts what to study next.
 
-> **Status: planning complete, implementation not started.** This repository currently contains the product and engineering plan only. There is no runnable application yet, and no command below that says "planned" works today. The first build milestone is described in [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md#4-milestone-1--foundation--goals-vertical-slice).
+> **Status: application foundation.** The web app, API, design system, health checks, Docker setup and CI exist and run. There are **no accounts, goals or AI features yet**: those arrive in the next milestones ([plan](docs/IMPLEMENTATION_PLAN.md)). Nothing in the UI is fake user data.
 
 "StudyPilot" is a working name and is configurable.
+
+## Quickstart
+
+Prerequisites: **Git**, **Node 24** (npm 11), **[uv](https://docs.astral.sh/uv/)** (provides Python 3.14). Details and troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+```bash
+git clone https://github.com/Rishicreates20/StudyPilot.git
+cd StudyPilot
+
+npm install                         # web dependencies
+uv sync --directory services/api    # API dependencies
+```
+
+Run the two services (separate terminals). No configuration is needed locally:
+
+```bash
+npm run dev:api    # http://localhost:8000   (API docs at /docs)
+npm run dev:web    # http://localhost:3000
+```
+
+| URL | |
+|---|---|
+| <http://localhost:3000> | Landing page |
+| <http://localhost:3000/status> | Live web + API health |
+| <http://localhost:3000/design> | Design system preview |
+| <http://localhost:8000/healthz> · `/readyz` | API liveness · readiness |
+| <http://localhost:3000/api/health> | Web liveness |
+
+Verify everything (format, lint, types, tests for web and API):
+
+```bash
+npm run check
+```
+
+With Docker (API + web with hot reload):
+
+```bash
+docker compose up --build
+```
 
 ## Documentation
 
 | Document | What it covers |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | Vision, personas, priorities (P0–P2), functional requirements with acceptance criteria, non-functional requirements, metrics, assumptions |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, repository structure, auth model, data model and migration strategy, job queue, AI layer, security, testing, dev environment, decision log |
-| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Environment findings, milestones M1–M9, the exact first milestone, credentials needed, risk register |
-| [CLAUDE.md](CLAUDE.md) | Working agreement for AI-assisted development in this repository |
-
-## Product priorities
-
-| Priority | Scope |
-|---|---|
-| **P0 — Core loop** | Auth · learning goals · async roadmap generation · structured lessons · study workspace with resume · quizzes with server-side grading · mastery and next action |
-| **P1 — Learning loop** | Document upload + RAG with citations · OCR · flashcards (spaced repetition) · YouTube recommendations · adaptive roadmaps · reminders and streaks |
-| **P2 — Expansion** | PDF/PPT export · Hindi/Odia improvements · Expo mobile apps · subscriptions · offline study · more exam verticals |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Install, run, test, Docker, configuration reference, troubleshooting |
+| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | Tokens, components, accessibility rules |
+| [docs/PRD.md](docs/PRD.md) | Vision, personas, priorities (P0–P2), requirements, assumptions |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data model, auth, job queue, AI layer, decisions |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Milestones M1–M9, risks, credentials needed |
+| [CLAUDE.md](CLAUDE.md) | Working agreement for AI-assisted development |
 
 ## Technology
 
 | Layer | Choice |
 |---|---|
-| Web | Next.js (App Router), React, TypeScript (strict), Tailwind CSS, shadcn/ui |
-| API | Python 3.14, FastAPI, Pydantic, SQLAlchemy 2.x |
-| Data and auth | Supabase Auth, PostgreSQL with row-level security, pgvector, private Supabase Storage |
-| Background work | One PostgreSQL-backed durable job queue and a worker process |
-| AI | Configurable LLM provider (Gemini or OpenAI) behind an `LLMProvider` interface; structured outputs validated by Pydantic; RAG |
-| Hosting | Vercel (web), Render (API + worker), Supabase (managed) |
-| Mobile (later) | Expo / React Native using the same API contract |
+| Web | Next.js 16 (App Router, Cache Components), React 19, TypeScript (strict), Tailwind CSS 4, shadcn/ui |
+| API | Python 3.14, FastAPI, Pydantic, structlog |
+| Data and auth *(next milestone)* | Supabase Auth, PostgreSQL with row-level security, pgvector, private Storage |
+| Background work *(planned)* | One PostgreSQL-backed durable job queue and a worker process |
+| AI *(planned)* | Configurable LLM provider (Gemini or OpenAI) behind an `LLMProvider` interface |
+| Tests | Vitest + Testing Library, pytest |
+| CI | GitHub Actions |
+| Hosting *(planned)* | Vercel (web), Render (API + worker), Supabase (managed) |
 
-## Planned repository layout
+## Repository layout
 
 ```
-apps/web            Next.js application
-apps/mobile         Expo application (later)
-services/api        FastAPI API + worker (one Python package)
-packages/contracts  TypeScript types/client generated from the API's OpenAPI document
-supabase/           Migrations (source of truth for the schema), pgTAP tests, seed
-e2e/                Playwright end-to-end tests
+apps/web            Next.js application (UI, design system, pages)
+services/api        FastAPI application (health, config, errors, logging)
 docs/               Product and engineering documentation
+.github/workflows   CI
+docker-compose.yml  Local stack (API + web)
 ```
 
-Directories are created by the milestone that first needs them. See [ARCHITECTURE §3](docs/ARCHITECTURE.md#3-repository-structure).
+Planned, not yet created: `supabase/` (migrations, the schema's source of truth), `packages/contracts` (typed API client), `apps/mobile`, `e2e/`. See [ARCHITECTURE §3](docs/ARCHITECTURE.md#3-repository-structure).
 
-## Prerequisites (for when implementation starts)
+## What is implemented
 
-- **Git**, **Node 24** with npm, **`uv`** (which provides **Python 3.14**)
-- A **Supabase** account and a development project
-- Optional: **Docker** (local Supabase stack), or a GitHub Codespace
-
-Accounts and API keys needed per milestone are listed in [IMPLEMENTATION_PLAN §6](docs/IMPLEMENTATION_PLAN.md#6-external-services-accounts-and-credentials).
-
-### Windows notes
-
-- Use a **short checkout path** such as `C:\dev\StudyPilot`; Windows long-path support is typically off and `node_modules` nests deeply.
-- **Smart App Control** can block unsigned native binaries. Python 3.14 via `uv` is the verified-working combination; see [ARCHITECTURE §15](docs/ARCHITECTURE.md#15-development-environment).
-- The repository normalises line endings to LF (`.gitattributes`).
-
-## Quickstart
-
-*Planned — arrives with Milestone 1. This section will be replaced with commands that have been run and observed to work.*
+- **Web:** responsive layout with skip link, header navigation and mobile drawer, light/dark/system theme, design tokens with automated WCAG contrast tests, reusable components (buttons, cards, inputs, dialogs, navigation, progress bar and ring, alerts, skeletons, empty/loading/error states), pages for landing, status and design preview, `/api/health`, not-found and error boundaries, fail-fast environment validation.
+- **API:** application factory, validated settings (exit code 78 with a clear message on bad config), structured logging with request IDs, RFC 9457 problem+json errors, CORS allow-list, `/healthz` and `/readyz` with a pluggable readiness-check registry.
+- **Tooling:** Prettier, ESLint, `tsc`, ruff, pyright (strict), Vitest, pytest, one `npm run check` command, Dockerfiles, Compose, CI.
 
 ## Security
 
-Never commit secrets. `.env*` files are git-ignored; only `.env.example` files with placeholders are tracked. The repository is public. See [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-security-privacy-and-threat-notes).
+Never commit secrets. `.env*` files are git-ignored; only `.env.example` files with placeholders are tracked, and only `NEXT_PUBLIC_*` values reach the browser. The repository is public. See [ARCHITECTURE §13](docs/ARCHITECTURE.md#13-security-privacy-and-threat-notes).
 
 ## Licence
 

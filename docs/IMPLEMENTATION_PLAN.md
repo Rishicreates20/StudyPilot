@@ -85,17 +85,19 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 
 ### 4.3 Ordered tasks
 
-**M1a — Foundation** *(commit boundary 1)*
+**M1a — Foundation** *(commit boundary 1)* — **implemented; see status notes**
 
-- [ ] Repository scaffold at a short path: root `package.json` (npm workspaces + cross-platform scripts), `.editorconfig`, Node/Python version pins (`.nvmrc`, `.python-version` = 3.14).
-- [ ] `services/api`: `uv` project, ruff + pyright config, app factory, **fail-fast settings validation** (Pydantic Settings; secrets masked), structlog JSON logging, request-ID middleware, problem+json error handlers, `/healthz` and `/readyz`.
-- [ ] `apps/web`: Next.js App Router, strict TypeScript, Tailwind CSS, shadcn/ui init, design tokens (light/dark), fonts including Devanagari/Odia fallbacks, Vitest + Testing Library, a minimal honest landing page (no invented statistics).
-- [ ] `supabase/`: `supabase init`; `config.toml` with local email confirmation off, Data API not exposed for application schemas.
-- [ ] `services/api/Dockerfile`, `docker-compose.yml`, `.env.example` (api and web), `.devcontainer/`.
-- [ ] GitHub Actions CI skeleton: API job, web job, secret-scan job.
-- [ ] README and `CLAUDE.md` updated with commands that were actually run.
+- [x] Repository scaffold: root `package.json` (npm workspaces + cross-platform scripts), `.editorconfig`, Prettier config, `.nvmrc` = 24, `.python-version` = 3.14.
+- [x] `services/api`: `uv` project, ruff + pyright (strict) config, app factory (`--factory`), **fail-fast settings validation** (exit code 78, names variables, never echoes values), structlog logging, request-ID middleware, problem+json error handlers, CORS allow-list, `/healthz` and `/readyz` (pluggable readiness registry; the database check is added in M1b).
+- [x] `apps/web`: Next.js 16 App Router (Cache Components), strict TypeScript 6.0.3, Tailwind CSS 4, shadcn/ui (Radix, "nova" style, adapted to our tokens), design tokens with light/dark and automated WCAG contrast tests, Latin + Devanagari + Odia fonts, component library, Vitest + Testing Library, honest landing page, `/status`, `/design`, `/api/health`, fail-fast env validation.
+- [x] `services/api/Dockerfile`, `apps/web/Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example` files (root, api, web).
+- [x] GitHub Actions CI: API job, web job, Docker build-and-boot job, secret scan.
+- [x] README, `docs/DEVELOPMENT.md`, `docs/DESIGN_SYSTEM.md` and `CLAUDE.md` updated with commands that were actually run.
+- [ ] *Deferred to M1b:* `supabase/` (`supabase init`, `config.toml`) — it belongs with the first migration. *Deferred, optional:* `.devcontainer/`.
 
-*Exit check:* one command runs lint + type-check + unit tests for both apps and passes; CI is green on `main`; both health endpoints respond; no secret is tracked.
+*Status notes (what is and is not verified):* `npm run check` passes locally (formatting, lint, types and tests for web and API). Both apps were started and their health endpoints and pages exercised in a browser. **Not verified locally:** Docker builds and Compose (no Docker on the dev machine) and the GitHub Actions workflow (YAML parses, but it has not run). Both are exercised by CI on the first push.
+
+*Exit check:* one command runs lint + type-check + unit tests for both apps and passes ✅; both health endpoints respond ✅; no secret is tracked ✅; CI green on `main` ⏳ (pending first run).
 
 **M1b — Data and API slice** *(commit boundary 2)*
 

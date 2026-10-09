@@ -1,0 +1,65 @@
+# Local development stack: the API and the web app, both with hot reload.
+#
+#   docker compose up --build
+#
+# The database, auth and storage are NOT part of this file: they arrive with the persistence
+# milestone via the Supabase CLI (`supabase start`) or a hosted Supabase project.
+#
+# Configuration comes from the shell or a root-level .env file (git-ignored). Everything has a
+# local-development default, so `docker compose up --build` works with no setup.
+
+name: studypilot
+
+services:
+  api:
+    build:
+      context: services/api
+      target: dev
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # The browser calls the API directly from the host, so allow the web origin.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Only the source is mounted; dependencies stay in the image (/opt/venv).
+      - ./services/api/app:/srv/api/app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    environment:
+      # Browser-facing API address (compiled into client code).
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-StudyPilot}
+      # Server-side address: inside the Compose network the API is reachable by service name.
+      API_INTERNAL_BASE_URL: http://api:8000
+      # Bind mounts on Windows/macOS do not deliver file-change events reliably.
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/repo/apps/web
+      # Keep the Linux node_modules / build cache from the image; never use the host's.
+      - web_node_modules:/repo/apps/web/node_modules
+      - web_next_cache:/repo/apps/web/.next
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  web_node_modules:
+  web_next_cache:

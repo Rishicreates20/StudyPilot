@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets, local state and other platforms' binaries.
+.git
+.github
+.claude
+docs
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/coverage
+**/*.log
+
+# Secrets: never send local environment files to the Docker daemon.
+**/.env
+**/.env.*
+!**/.env.example

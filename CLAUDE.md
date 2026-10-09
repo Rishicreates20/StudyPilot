@@ -4,12 +4,12 @@ Durable instructions for AI-assisted work in this repository. Keep this file sho
 
 ## Status
 
-Planning is complete; **no application code exists yet**. The next task is **Milestone 1** in `docs/IMPLEMENTATION_PLAN.md` §4. Do not build later milestones early.
+The **foundation (Milestone 1a)** is implemented: web app, API, design system, health checks, Docker, CI. There are no accounts, database or AI features yet. The next task is **Milestone 1b** (database + auth + goals API) in `docs/IMPLEMENTATION_PLAN.md` §4. Do not build later milestones early.
 
 ## Read first
 
 - `docs/PRD.md` — what and why; assumptions A1–A14
-- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…017); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
+- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…020); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
 - `docs/IMPLEMENTATION_PLAN.md` — milestone order, acceptance criteria, risks
 
 ## Architecture rules (non-negotiable)
@@ -28,14 +28,35 @@ Planning is complete; **no application code exists yet**. The next task is **Mil
 ## Toolchain
 
 - Python **3.14** via `uv` (3.12 is blocked on the primary dev machine). Node **24**, npm workspaces (no pnpm). TypeScript **pinned to 6.0.x** (not 7).
-- Python: ruff, pyright, pytest. Web: ESLint, `tsc`, Vitest, Playwright.
+- Python: ruff, pyright (strict), pytest. Web: Prettier, ESLint, `tsc`, Vitest + Testing Library. Playwright arrives with the first end-to-end slice.
 
-*Commands will be listed here when Milestone 1 lands. Do not invent commands; document only ones that were run and worked.*
+### Commands (all run from the repo root; all were run and passed)
+
+| Command | Does |
+|---|---|
+| `npm install` · `uv sync --directory services/api` | Install web / API dependencies |
+| `npm run dev:web` · `npm run dev:api` | Start Next.js (:3000) / FastAPI (:8000) |
+| `npm run check` | Format check + lint + type-check + tests for **both** apps |
+| `npm run format` | Write formatting (Prettier + `ruff format`) |
+| `npm run lint` · `typecheck` · `test` (each also `:web` / `:api`) | Individual checks |
+| `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run build` | Production web build (the variable is required) |
+| `docker compose up --build` | API + web with hot reload (**not verified locally**; CI builds and boots the images) |
+
+Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyright` launchers, which Smart App Control blocks). The API starts with `uvicorn app.main:create_app --factory`.
+
+### Web conventions (Next.js 16 — verify against `node_modules/next/dist/docs/` before using an API)
+
+- **Cache Components is on.** Request-time work (fetching live data, `Date.now()`, `Math.random()`, request headers) must sit under a `<Suspense>` boundary and, when it is inherently per-request, start with `await connection()` from `next/server`. Route handlers that report live state must do the same (see `app/api/health/route.ts`). Never call `new Date()` / `Date.now()` in a Server Component outside that.
+- The error boundary prop is `retry` (not `reset`/`unstable_retry`). `LayoutProps<"/">` / `PageProps` types come from `next typegen` (run by `npm run typecheck:web`).
+- Environment access goes through `src/lib/env.ts` (Zod, fail-fast); read `NEXT_PUBLIC_*` only via literal `process.env.NAME` there.
+- Use design tokens and the components in `src/components` (see `docs/DESIGN_SYSTEM.md`); never hard-code colours. Server-only tests need `// @vitest-environment node`.
+- Zod: use `z.url({ protocol: /^https?$/ })`, not `z.httpUrl()` (it rejects `localhost` and `http://api:8000`).
 
 ## Dev-environment gotchas (primary machine: Windows 11 Home)
 
 - **Smart App Control is on.** Unsigned native code can be blocked. Test any new native dependency early. Never suggest disabling the setting.
-- Long paths are disabled: work from a short path (for example `C:\dev\StudyPilot`), not from deeply nested app-data folders.
+- Long paths are disabled: work from a short path, not from deeply nested app-data folders. The current checkout lives under OneDrive, which makes installs slow (a first `npm install` took ~5 minutes); prefer a folder outside cloud sync.
+- Write multi-line files with the Write tool, not shell heredocs: a large combined heredoc failed to parse in this environment.
 - No Docker/WSL here: database-dependent tests (pgTAP, integration, E2E) are verified in CI or a Codespace. Do not claim they passed unless output was observed.
 - Git: the default branch is `main`; line endings are LF via `.gitattributes`.
 

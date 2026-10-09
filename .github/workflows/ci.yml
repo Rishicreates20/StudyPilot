@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch/PR supersedes a run that is still in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API · format, lint, types, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+      - name: Install dependencies (lockfile must be up to date)
+        run: uv sync --frozen
+      - run: uv run python -m ruff format --check .
+      - run: uv run python -m ruff check .
+      - run: uv run python -m pyright
+      - run: uv run python -m pytest
+
+  web:
+    name: Web · format, lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Required for production builds (see apps/web/.env.example). Public by design.
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Formatting
+        run: npx prettier --check .
+      - run: npm run lint:web
+      - run: npm run typecheck:web
+      - run: npm run test:web
+      - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Docker · build images and boot the stack
+    needs: [api, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate the Compose file
+        run: docker compose config --quiet
+      - name: Build API images (runtime and dev targets)
+        run: |
+          docker build --target runtime -t studypilot-api:ci services/api
+          docker build --target dev -t studypilot-api:ci-dev services/api
+      - name: Build web images (runtime and dev targets)
+        run: |
+          docker build -f apps/web/Dockerfile --target runtime \
+            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 -t studypilot-web:ci .
+          docker build -f apps/web/Dockerfile --target dev -t studypilot-web:ci-dev .
+      - name: Boot the runtime images and check every health endpoint
+        run: |
+          docker network create ci-net
+          docker run -d --name api --network ci-net -p 8000:8000 -e APP_ENV=test studypilot-api:ci
+          docker run -d --name web --network ci-net -p 3000:3000 \
+            -e API_INTERNAL_BASE_URL=http://api:8000 studypilot-web:ci
+
+          for attempt in $(seq 1 40); do
+            api_health=$(docker inspect -f '{{.State.Health.Status}}' api)
+            web_health=$(docker inspect -f '{{.State.Health.Status}}' web)
+            echo "attempt $attempt: api=$api_health web=$web_health"
+            if [ "$api_health" = healthy ] && [ "$web_health" = healthy ]; then break; fi
+            sleep 3
+          done
+          [ "$api_health" = healthy ] && [ "$web_health" = healthy ]
+
+          curl --fail --silent --show-error http://localhost:8000/healthz; echo
+          curl --fail --silent --show-error http://localhost:8000/readyz; echo
+          curl --fail --silent --show-error http://localhost:3000/api/health; echo
+          # The status page renders live API data server-side: both cards must be operational.
+          operational=$(curl --fail --silent --show-error http://localhost:3000/status | grep -o 'Operational' | wc -l)
+          echo "operational badges on /status: $operational"
+          [ "$operational" -ge 2 ]
+      - name: Container logs
+        if: failure()
+        run: |
+          docker logs api || true
+          docker logs web || true
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A licence is only required if this repository moves to a GitHub organisation.
