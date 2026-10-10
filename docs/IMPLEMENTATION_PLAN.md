@@ -73,13 +73,13 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 
 ### 4.1 Preconditions (from the account owner)
 
-1. **A Supabase development project** — provides project URL, anon key, JWT verification details (JWKS URL or legacy secret), a pooler connection string and the project ref. These go into local, git-ignored `.env` files only. They must never be pasted into chat or committed.
+1. **A Supabase development project** — provides project URL, publishable key, JWT verification details (JWKS URL or legacy secret), a pooler connection string and the project ref. These go into local, git-ignored `.env` files only. They must never be pasted into chat or committed.
 2. **A short checkout path** (for example `C:\dev\StudyPilot`) for the implementation session, so `node_modules` stays under the 260-character path limit.
 3. *(Optional but valuable)* Docker/WSL or a GitHub Codespace for running the full local stack. Without it, database-dependent checks run in CI.
 
 ### 4.2 Scope
 
-**In:** monorepo scaffold · environment validation · health endpoints · structured logging + request IDs · RFC 9457 errors · JWT verification · RLS-scoped DB session · `profiles` and `learning_goals` with migrations, RLS and pgTAP tests · `GET /v1/me`, `POST/GET /v1/goals`, `GET /v1/goals/{id}` · generated API contract + drift check · sign-up/sign-in/sign-out · protected app layout · dashboard with real data · create-goal form · unit, integration, component and E2E tests · CI · Dockerfile + compose for the API · `.env.example` files · real README quickstart.
+**In:** monorepo scaffold · environment validation · health endpoints · structured logging + request IDs · RFC 9457 errors · JWT verification · RLS-scoped DB session · `profiles` and `learning_goals` with migrations, RLS and database tests · `GET /v1/me`, `POST/GET /v1/goals`, `GET /v1/goals/{id}` · generated API contract + drift check · sign-up/sign-in/sign-out · protected app layout · dashboard with real data · create-goal form · unit, integration, component and E2E tests · CI · Dockerfile + compose for the API · `.env.example` files · real README quickstart.
 
 **Out (later milestones):** editing/archiving goals (M2) · onboarding wizard and settings UI (M2) · any AI call, queue or worker (M3) · documents (M6) · deployment (M2).
 
@@ -99,48 +99,51 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 
 *Exit check:* one command runs lint + type-check + unit tests for both apps and passes ✅; both health endpoints respond ✅; no secret is tracked ✅; CI green on `main` ⏳ (pending first run).
 
-**M1b — Data and API slice** *(commit boundary 2)*
+**M1b — Data and API slice** *(commit boundary 2)* — **implemented; see status notes**
 
-- [ ] **Time-boxed spikes** (findings recorded in the ARCHITECTURE decision log):
-  - **S1** — `SET LOCAL ROLE authenticated` + `request.jwt.claims` inside a SQLAlchemy/psycopg transaction through the chosen pooler mode; confirm `auth.uid()` works in policies (ADR-006).
-  - **S2** — JWT verification: which mode the hosted project and the local stack use; implement JWKS with HS256 fallback.
-  - **S3** — Next.js 16 session refresh (`proxy.ts` vs `middleware.ts`) with the current `@supabase/ssr` API.
-  - **S4** — Pin a toolchain that passes together: TypeScript 6.0.x, ESLint, `typescript-eslint`, Next 16, Vitest.
-- [ ] Migration `0001`: extensions, shared `set_updated_at()` trigger, `profiles`, `handle_new_user` trigger + backfill, RLS, grants.
-- [ ] Migration `0002`: `learning_goals` with check constraints, indexes, RLS, grants.
-- [ ] pgTAP tests: owner can read/write own rows; another authenticated user cannot read or write them; `anon` has no access; constraints reject invalid rows; profile auto-created on signup.
-- [ ] API: SQLAlchemy models, Pydantic schemas, repositories, services, routers (`/v1/me`, `/v1/goals`), `user_session`, cursor pagination, 404-on-non-owned.
-- [ ] Tests: settings validation; JWT (valid, expired, wrong audience, bad signature, missing); authorization (user B → 404 on user A's goal); validation errors; integration against real Postgres; **schema drift test** (models vs migrated DB).
-- [ ] OpenAPI export → `packages/contracts` (generated types + client) → CI drift check.
+- [x] **Time-boxed spikes** (outcomes in the ARCHITECTURE decision log):
+  - **S1** — role switching and claims inside a request transaction: verified on PostgreSQL 16 through psycopg 3 and a pool (ADR-006, ADR-021). Under Supabase's own roles: ⏳ CI job `supabase-stack`.
+  - **S2** — JWT verification: both modes implemented with per-mode algorithm allow-lists and tested with real signatures; Supabase's docs checked on 2026-10-10. Which algorithm the local stack issues is detected in CI, not assumed. Genuine Supabase tokens: ⏳ CI.
+  - **S3** — Next.js 16 uses `proxy.ts`; `@supabase/ssr` sessions are refreshed there with `getClaims()`. Verified by unit tests; the real refresh is exercised by the Playwright journey ⏳ CI.
+  - **S4** — toolchain pinned in M1a (TypeScript 6.0.3, Next 16.4, `typescript-eslint` 8.71).
+- [x] Migrations `20261009130000_profiles.sql` (extensions-free; `set_updated_at()`, `profiles`, `handle_new_user` trigger with backfill, RLS, explicit grants) and `20261009130100_learning_goals.sql` (check constraints, index, RLS, column-level grants, per-user ownership key).
+- [x] Database tests (pytest on a real PostgreSQL 16 instead of pgTAP, ADR-022): owner can read and write only their own rows; another user cannot; `anon` has no access; constraints reject invalid rows; profile created on sign-up; guards that fail the build if a `public` table lacks RLS.
+- [x] API: Pydantic schemas, psycopg repositories, services, routers (`/v1/me`, `/v1/goals`), `user_transaction`, cursor pagination, 404 on non-owned resources, per-user goal cap.
+- [x] Tests: settings validation; JWT (valid, missing, malformed, expired, wrong audience/issuer/algorithm, bad signature, anonymous, non-UUID subject); JWKS cache behaviour; authorization (user B gets 404 on user A's goal); validation errors; pool isolation; failure handling. **250 pass, 1 skipped** (the genuine-stack module). No schema drift test: there are no ORM models (ADR-021).
+- [x] OpenAPI export → `packages/contracts` (generated types) → `npm run contracts:check`; regeneration is deterministic. The CI step is wired ⏳ unobserved.
 
-**M1c — Web slice** *(commit boundary 3)*
+**M1c — Web slice** *(commit boundary 3)* — **implemented; see status notes**
 
-- [ ] Sign-up, sign-in, sign-out; session handling; protected `(app)` layout; clear handling of invalid credentials and unconfirmed email.
-- [ ] Dashboard: goals list from the API with skeleton, empty state, error state with retry.
-- [ ] Create-goal form (React Hook Form + Zod) showing server-side field errors; success returns to the dashboard with the new goal visible.
-- [ ] Vitest component tests (form validation, loading/empty/error rendering, API error mapping).
-- [ ] Playwright journey: sign up → create goal → appears on dashboard → reload → still present → **second user does not see it**. Runs in CI.
+- [x] Sign-up, sign-in, sign-out; HttpOnly cookie sessions refreshed in `proxy.ts`; protected `(app)` layout that re-checks the session; uniform "email or password is incorrect" message; "check your email" state when confirmation is on; a confirm route that refuses open redirects and unknown link types.
+- [x] Dashboard: goals from the API with skeleton, empty state, and error state with retry; session-ended handling that cannot loop (ADR-024).
+- [x] Create-goal form (native form + Server Action + Zod, not React Hook Form) showing server-side field errors; success returns to the dashboard with the new goal visible.
+- [x] Vitest tests (283): redirect safety, schemas, messages, auth and goal Server Actions with only Supabase and the API mocked, the typed API client, the proxy and cookie hardening, the confirm route.
+- [x] Playwright journey written (`apps/web/e2e`): sign up → create goal → reload → HttpOnly cookie check → sign out → blocked → sign in → **second user sees nothing**. ⏳ Not yet run anywhere: it needs the Supabase stack, which only CI can start.
 
 **M1d — Review and documentation** *(commit boundary 4)*
 
-- [ ] Security pass: ownership paths, grants, secrets in bundles (`grep` the build output), CORS, error bodies.
-- [ ] Accessibility pass (keyboard, focus, contrast) and a mobile-width pass.
-- [ ] Update README, ARCHITECTURE decision log (S1–S4 outcomes; ADR-006 status), `.env.example`, and the config reference to match reality.
+- [x] Security pass. Ownership paths, grants and error bodies are covered by tests. **Bundle search (2026-10-10):** the web app was built with canary values for `DATABASE_URL`, the JWT secret, a service-role key and a secret key in its environment; none appears anywhere in the 422 files of `.next`, there are no JWT-shaped strings, and the browser bundle contains no Supabase client code and not even the publishable key (auth runs on the server). The only `sb_secret_` matches are the Supabase library's own key-prefix checks. Not done: a dependency-level review beyond `npm audit`.
+- [ ] Accessibility pass (keyboard, focus, contrast) and a mobile-width pass on the new pages.
+- [x] README, ARCHITECTURE (ADR-021…024, S1–S3 outcomes, ADR-006 status), `.env.example` files, `docs/SUPABASE_SETUP.md` and the configuration reference updated to match what exists.
+
+*Status notes (what is and is not verified):* Run locally and observed: web typecheck, lint, formatting and 283 Vitest tests; production web build; API 250 pytest tests against a real PostgreSQL 16 and strict pyright with 0 errors; contract regeneration is byte-identical. **Not verified locally** (no Docker, and no Supabase project is connected to this repository): sign-up, sign-in, session persistence and sign-out against genuine Supabase Auth; Supabase's real roles and `auth` schema; the Playwright journey; the Docker images; the GitHub Actions workflow. Those are what the `supabase-stack` and `docker` jobs exist to prove, and they stay ⏳ until a run is observed.
 
 ### 4.4 Acceptance criteria
 
-1. A new user can sign up and sign in; an unauthenticated API call to a protected route returns **401**.
-2. Creating a goal persists a row in PostgreSQL with `user_id` = the caller.
-3. The goal appears on the dashboard and still does after a full reload.
-4. User B requesting user A's goal receives **404**; a database session acting as user B cannot select A's rows (pgTAP **and** integration test).
-5. `anon` has no table access to application tables.
-6. Invalid input produces field-level errors in the UI and a problem+json 422 from the API.
-7. The dashboard shows skeleton, empty and error-with-retry states.
-8. Missing or invalid environment variables stop the API at startup with a clear message that does not echo secret values.
-9. `/healthz` and `/readyz` behave correctly (readiness fails when the database is unreachable).
-10. The generated API client is in sync with the OpenAPI document (CI-enforced); the schema drift test passes.
-11. Lint, type-check, unit, integration, pgTAP and E2E suites pass **in CI**, and the outputs were read before this milestone was declared done.
-12. A new contributor can follow the README to a running app; docs describe only what exists.
+| # | Criterion | Evidence | Status |
+|---|---|---|---|
+| 1 | A new user can sign up and sign in; an unauthenticated call to a protected route returns **401** | 401 matrix in API tests; real sign-up/sign-in in the stack job and Playwright | 401 ✅ · sign-up/sign-in ⏳ CI |
+| 2 | Creating a goal persists a row with `user_id` = the caller | API and database tests on real PostgreSQL | ✅ |
+| 3 | The goal appears on the dashboard and survives a reload | Playwright | ⏳ CI |
+| 4 | User B gets **404** for user A's goal; a database session acting as B cannot select A's rows | API and database tests; the same under Supabase's roles in the stack job | Real PostgreSQL ✅ · Supabase roles ⏳ CI |
+| 5 | `anon` has no table access to application tables | Guard tests; stack job | ✅ locally · stack ⏳ CI |
+| 6 | Invalid input produces field-level errors in the UI and a problem+json 422 | Web action and schema tests; API validation tests | ✅ |
+| 7 | The dashboard shows skeleton, empty and error-with-retry states | Implemented; empty state exercised by the Playwright journey; the feedback, load-error and goal components have unit tests; the dashboard page itself has none | ◐ partly tested |
+| 8 | Missing or invalid environment variables stop the API at startup without echoing secrets | Settings tests | ✅ |
+| 9 | `/healthz` and `/readyz` behave correctly (readiness fails when the database is unreachable) | Health and failure tests | ✅ |
+| 10 | The generated API client is in sync with the OpenAPI document (CI-enforced) | Deterministic regeneration observed locally; CI step wired | ✅ locally · CI ⏳ (no drift test: no ORM models) |
+| 11 | Lint, type-check, unit, integration and E2E suites pass **in CI**, outputs read | — | ⏳ pending the first run with these changes |
+| 12 | A new contributor can follow the README to a running app | `docs/SUPABASE_SETUP.md` written from Supabase's current docs | ⏳ not yet followed by someone fresh |
 
 ## 5. Later milestones in outline
 
@@ -189,7 +192,7 @@ Nothing below is assumed to exist. Provide secrets only through local `.env` fil
 | **3** | **AI cost or quality failure** — runaway regeneration, hallucinated citations, infeasible plans. | High | High | Budgets and usage ledger land with the first AI feature; plan feasibility, citations and answer keys validated by code; bounded repairs; checkpointed retries. | M3–M6 |
 | **4** | **Platform behaviour differs from assumptions** (Supabase JWT signing, Data API grants, pooler modes, Next.js 16 request interceptor, AI SDK major versions). | Medium | Medium | Marked **[verify]**; spikes S1–S4; read official docs before each integration. | M1, M3 |
 | **5** | **Toolchain incompatibility** — TypeScript 7 is "latest" but `typescript-eslint` requires TypeScript < 6.1; Python 3.14 wheel gaps for future libraries. | High | Medium | Pin TypeScript 6.0.x; verify each native dependency under Smart App Control before adopting; fall back to 3.13 only with evidence. | M1 |
-| **6** | **Schema/model/contract drift** between SQL migrations, SQLAlchemy models and TypeScript types. | Medium | Medium | Drift test; OpenAPI regeneration check in CI. | M1 |
+| **6** | **Schema/contract drift** between SQL migrations, API schemas and TypeScript types. | Medium | Medium | No ORM models to drift (ADR-021); OpenAPI regeneration check in CI. | M1 |
 | **7** | **Scope creep** toward "all subjects and exams" and cosmetic features. | High | Medium | Persona A, P0 gate at M5, postponed-features list, milestone exit criteria. | Ongoing |
 | **8** | **Windows environment friction** — 260-character paths, reputation-based blocking of new native binaries. | Medium | Low–Medium | Short checkout path; lockfiles; test new natives early; CI/Codespaces fallback. | M1 |
 | **9** | **Public repository** exposes docs and any accidental secret. | Low | High | Placeholders only; `.gitignore`; secret scanning in CI; decide public/private (Q4). | Ongoing |

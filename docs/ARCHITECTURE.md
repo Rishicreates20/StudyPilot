@@ -63,7 +63,7 @@ Proposed layout. Directories are created by the milestone that first needs them,
 ```
 StudyPilot/
 ├─ apps/
-│  ├─ web/                      # Next.js App Router · React · strict TypeScript · Tailwind · shadcn/ui   (M1)
+│  ├─ web/                      # Next.js App Router · React · strict TypeScript · Tailwind · shadcn/ui · e2e/ (Playwright)   (M1)
 │  └─ mobile/                   # Expo / React Native                                                     (P2)
 ├─ services/
 │  └─ api/                      # FastAPI + worker — one Python package, two entrypoints                  (M1)
@@ -71,8 +71,7 @@ StudyPilot/
 │     ├─ app/
 │     │  ├─ main.py             # ASGI app factory
 │     │  ├─ api/v1/             # routers — thin: parse, authorize, call a service, shape the response
-│     │  ├─ core/               # config, security (JWT), logging, errors, db sessions, request context
-│     │  ├─ models/             # SQLAlchemy 2.x models (mirror of migrations)
+│     │  ├─ core/               # config, security (JWT), logging, errors, db (RLS-scoped transactions), request context
 │     │  ├─ schemas/            # Pydantic request/response DTOs
 │     │  ├─ repositories/       # data access only; no business rules
 │     │  ├─ services/           # goals · roadmaps · lessons · assessments · progress · documents · resources · exports
@@ -84,15 +83,14 @@ StudyPilot/
 │     │  │  ├─ ingestion/       # extract · chunk · embed
 │     │  │  └─ validators/      # deterministic plan / lesson / quiz validators
 │     │  └─ workers/            # queue claim loop, lease/heartbeat, retry policy, handlers registry
-│     └─ tests/                 # unit/ · integration/ · ai_eval/ · fixtures/
+│     └─ tests/                 # auth/ · db/ · api/ · supabase_stack/ · support/ · pg_server/ (+ ai_eval/ later)
 ├─ packages/
 │  └─ contracts/                # generated TypeScript types + typed fetch client from OpenAPI   (M1)
 ├─ supabase/
 │  ├─ config.toml
 │  ├─ migrations/               # SINGLE SOURCE OF TRUTH for the database schema
-│  ├─ tests/                    # pgTAP tests: RLS, constraints, grants
+│  ├─ templates/                # Auth email templates (confirmation.html)
 │  └─ seed.sql                  # development fixtures only (no AI-generated content)
-├─ e2e/                         # Playwright journeys
 ├─ docs/                        # PRD · ARCHITECTURE · IMPLEMENTATION_PLAN · runbooks
 ├─ .github/workflows/           # CI
 ├─ .devcontainer/               # optional Linux dev environment (see §15)
@@ -105,7 +103,7 @@ Notes:
 
 - `packages/design-tokens` from the source brief is **deferred** until the Expo app exists. Until then, design tokens live as CSS variables in `apps/web` (YAGNI).
 - Worker code lives inside `services/api/app/workers` so it shares models, services and providers with the API without a shared-library package. The same Docker image runs either `uvicorn app.main:app` or `python -m app.workers`.
-- Layering rule, enforced by review and an import-linter check added in M3: `api → services → repositories → models`; `ai/*` is called by `services` and `workers`, never by `api` routers directly; nothing imports from `api`.
+- Layering rule, enforced by review and an import-linter check added in M3: `api → services → repositories → schemas`; `ai/*` is called by `services` and `workers`, never by `api` routers directly; nothing imports from `api`.
 
 ## 4. Components
 
@@ -122,12 +120,12 @@ Notes:
 
 ### 5.1 Authentication
 
-- Supabase Auth issues sessions. The web app uses `@supabase/ssr` with cookie-based sessions; server components read the session to obtain the access token. **[verify]** the current `@supabase/ssr` API and whether Next.js 16 names its request interceptor `proxy.ts` (replacing `middleware.ts`).
-- The API verifies the Bearer token on every protected request: signature, `exp`, `aud` (`authenticated`), `iss`, and a UUID `sub`. Two verification modes selected by config:
-  - **JWKS** (asymmetric signing keys) — preferred; keys fetched from the project's JWKS endpoint and cached.
-  - **HS256 shared secret** — fallback for legacy projects and, if needed, the local CLI stack.
-  **[verify]** which mode current hosted projects and the local stack use. **[spike S2 in M1]**.
-- The verified identity is a `Principal(user_id, email, role)` object. Handlers never read `user_id` from request bodies or query strings.
+- Supabase Auth issues sessions. The web app uses `@supabase/ssr` with cookie-based sessions that are read and refreshed **only on the server** (Server Components, Server Actions and the `proxy.ts` interceptor; **verified:** Next.js 16 renamed `middleware.ts` to `proxy.ts`). Session cookies are written `HttpOnly`, `SameSite=Lax` and, in deployments, `Secure`; the app never creates Supabase's browser client, so no token is readable by page scripts (ADR-023). Decisions use `getClaims()`, which verifies the token signature; `getSession()` is used only to fetch the token that is then sent to the API, never to decide who someone is.
+- The API verifies the Bearer token on every protected request (`app/core/security.py`): signature, `exp`, `aud` (`authenticated`), `iss`, a canonical-UUID `sub`, `role = authenticated`, and not anonymous. Two verification modes are selected by config, each with its **own algorithm allow-list**, so `none` and key-confusion attacks are refused:
+  - **JWKS** (`ES256`/`RS256` only) — preferred; keys fetched from the project's JWKS endpoint (`/auth/v1/.well-known/jwks.json`), cached, with a refetch cooldown for unknown `kid`s and stale-if-error behaviour.
+  - **HS256 shared secret** (`HS256` only) — for legacy projects and, where the local stack issues them, local tokens.
+  **Spike S2 (outcome):** Supabase's documentation (checked 2026-10-10) confirms the endpoint, a ~10-minute edge cache, and that a shared secret is "not recommended for production". Both modes are tested with real signatures. Which algorithm the local CLI stack issues is detected, not assumed: the CI job reads the header of a real token and picks the mode (`.github/scripts/supabase_stack_env.py`).
+- The verified identity is a `Principal(user_id, email, claims)` object. Handlers never read `user_id` from request bodies or query strings; a body that names an owner is rejected (`extra = forbid`).
 
 ### 5.2 Authorization — two independent layers
 
@@ -135,13 +133,12 @@ Notes:
 2. **Database RLS (ADR-006).** Application tables have RLS enabled with owner policies. For user-facing requests the API opens a transaction that drops to the `authenticated` role and sets the JWT claims, so `auth.uid()` resolves inside policies:
 
    ```python
-   async with user_session(principal) as db:    # BEGIN; SET LOCAL ROLE authenticated;
-       ...                                      #        set_config('request.jwt.claims', <json>, true)
-   async with system_session() as db:           # worker and grading-key reads only; bypasses RLS
-       ...
+   async with database.user_transaction(principal) as conn:   # BEGIN;
+       ...   # set_config('role', 'authenticated', true); set_config('request.jwt.claims', <claims>, true)
+             # repositories take a `UserConnection`, a NewType only this context manager produces
    ```
 
-   Consequence: a missing `WHERE user_id = …` in a repository cannot leak another user's rows. `system_session()` is confined to `services/*/privileged.py` modules and the worker; a test asserts no router imports it. **[spike S1 in M1]** — confirm `SET LOCAL ROLE` + claims works through the chosen pooler mode and with SQLAlchemy/psycopg.
+   Consequence: a missing `WHERE user_id = …` in a repository cannot leak another user's rows (repositories filter on `user_id` too; the database is the second lock, not the only one). A privileged `system_session()` for the worker and grading-key reads does not exist yet because no feature needs it; it arrives with the worker (M3), confined to `services/*/privileged.py` and the worker, with a test that no router imports it. **Spike S1 (outcome):** verified on real PostgreSQL 16 through psycopg 3 and a connection pool, including a test that a pooled connection does not keep the previous caller's role or claims. Both settings are transaction-local and prepared statements are disabled, so the same code works behind Supabase's session pooler (the one we use) and transaction pooler. Confirmation under Supabase's own roles is the `supabase-stack` CI job.
 
 ### 5.3 What each credential can do
 
@@ -158,8 +155,9 @@ Notes:
 ### 6.1 Strategy
 
 - **Source of truth: `supabase/migrations/*.sql`** (timestamped, forward-only), applied with the Supabase CLI. **Alembic is not used** (ADR-002): RLS policies, grants, `auth.users` triggers, storage policies and extensions are Supabase-native and are written directly in SQL.
-- **SQLAlchemy 2.x** is the data-access layer only. Models are hand-maintained mirrors of the migrations. A CI integration test reflects the migrated database and fails if any model column, type, nullability or key differs from the database (the **drift test**, M1).
-- **One migration per slice**, not one 17-table migration up front. Each migration contains, together: the tables, constraints, indexes, `enable row level security`, owner policies, explicit `grant`/`revoke`, and the pgTAP tests in `supabase/tests/`. No table ships without RLS and a test. This replaces the source brief's "migrate everything first" suggestion because policies are only trustworthy if they are tested with the table that introduced them.
+- **psycopg 3 with explicit SQL** is the data-access layer (ADR-021, which supersedes the SQLAlchemy plan). Repositories are small modules of parameterised SQL returning Pydantic row models, so there are no ORM models to drift from the migrations; a schema change that breaks a query fails the database and API tests.
+- **Grants are explicit.** Supabase gives `anon`, `authenticated` and `service_role` default privileges on new `public` tables; every migration revokes them and grants back only what the API needs (column-level `insert`/`update` grants where a field must not be client-controlled). A guard test fails the build if a `public` table lacks RLS or grants anything to `anon` (`tests/db/test_db_guards.py`).
+- **One migration per slice**, not one 17-table migration up front. Each migration contains, together: the tables, constraints, indexes, `enable row level security`, owner policies, explicit `grant`/`revoke`, and its database tests in `services/api/tests/db/` (ADR-022). No table ships without RLS and a test. This replaces the source brief's "migrate everything first" suggestion because policies are only trustworthy if they are tested with the table that introduced them.
 - **Forward-only.** Fixes are new migrations. Destructive changes use expand → migrate → contract.
 - **Environments.** Local: `supabase start` + `supabase db reset` (needs Docker; see §15). Hosted dev/staging/prod: `supabase link` + `supabase db push`, run by CI on merge (staging automatic, production behind manual approval).
 - **Seed data** (`seed.sql` / a script that calls the Auth admin API) creates development users and user-authored goals only. **No fake AI-generated lessons, roadmaps or quizzes** are ever seeded to make the product look complete.
@@ -327,14 +325,16 @@ Malware scanning (for example ClamAV) is not in the MVP; the compensating contro
 ## 11. Frontend architecture
 
 - **Next.js App Router**, React, TypeScript `strict`. Route groups: `(marketing)`, `(auth)`, `(app)`. The `(app)` layout requires a session.
-- **Server components** fetch initial data from FastAPI using the session's access token; **client components** use the same typed client, with TanStack Query for mutations and job-status polling. There is no BFF.
-- **Forms:** React Hook Form + Zod for *UX-level* validation only; the server remains authoritative and its field errors are surfaced in the form.
+- **Server Components** fetch data from FastAPI and **Server Actions** submit forms to it, both with the access token taken from the HttpOnly session cookie on the server (ADR-023), through the generated typed client. Client components never hold an API token. Job-status polling arrives with the first job (M3) and will go through a same-origin route that attaches the token server-side. There is no BFF layer: no business logic and no generic proxying of API paths.
+- **Forms:** native forms posting to Server Actions, validated with Zod before any network call, with the API's own field errors mapped back onto the right inputs; the API remains authoritative. React Hook Form is not used; add it only if a form needs rich client-side behaviour.
 - **UI:** Tailwind CSS with design tokens as CSS variables, shadcn/ui primitives, light/dark themes, skeletons for data-dependent regions, explicit empty/error/retry states, `prefers-reduced-motion` respected, keyboard-navigable.
 - **Typography:** a readable Latin face plus Noto Sans Devanagari and Noto Sans Oriya fallbacks so Hindi and Odia render correctly from the start. **[verify]** font availability through `next/font`.
 - **Job UX:** a generation screen shows stage-level progress, survives navigation, and exposes retry. The user is never left on an indefinite spinner.
 - **Secrets:** only `NEXT_PUBLIC_*` values reach the browser, and those are public by design.
 
 ## 12. Configuration reference
+
+Authoritative tables for the Supabase variables, with defaults and where to find each value, are in [SUPABASE_SETUP.md §4](SUPABASE_SETUP.md#4-environment-variable-reference).
 
 All configuration is environment-based and validated at startup (Pydantic Settings in the API; a Zod-validated module in the web app). Startup fails fast with a clear message listing missing or invalid variables, without printing secret values. `.env.example` files contain placeholders only; real `.env` files are git-ignored.
 
@@ -348,11 +348,15 @@ All configuration is environment-based and validated at startup (Pydantic Settin
 | `DATABASE_URL` | api, worker | **Yes** | M1 | Postgres connection (pooler; mode per §16) |
 | `SUPABASE_URL` | api, worker | No | M1 | Project URL |
 | `SUPABASE_JWT_MODE` | api | No | M1 | `jwks` or `hs256` |
-| `SUPABASE_JWKS_URL` | api | No | M1 | JWKS endpoint (jwks mode) |
-| `SUPABASE_JWT_SECRET` | api | **Yes** | M1 | HS256 secret (hs256 mode only) |
+| `SUPABASE_JWKS_URL` | api | No | M1 | JWKS endpoint (jwks mode); default `{SUPABASE_URL}/auth/v1/.well-known/jwks.json` |
+| `SUPABASE_JWT_SECRET` | api | **Yes** | M1 | HS256 secret (hs256 mode only; at least 32 characters) |
+| `SUPABASE_JWT_AUDIENCE` / `SUPABASE_JWT_ISSUER` | api | No | M1 | Expected `aud` (default `authenticated`) and `iss` (default `{SUPABASE_URL}/auth/v1`) |
+| `JWT_LEEWAY_SECONDS` | api | No | M1 | Clock-skew tolerance for `exp`; default 10, at most 60 |
+| `DB_POOL_MIN_SIZE` / `DB_POOL_MAX_SIZE` / `DB_POOL_TIMEOUT_SECONDS` | api | No | M1 | Connection pool; defaults 1 / 10 / 5 |
+| `MAX_ACTIVE_GOALS_PER_USER` | api | No | M1 | Per-user goal cap; default 50 |
 | `SUPABASE_SERVICE_ROLE_KEY` | api, worker | **Yes** | M6 | Storage admin and signed URLs |
 | `NEXT_PUBLIC_SUPABASE_URL` | web | No | M1 | Auth client |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web | No (public by design) | M1 | Auth client |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | web | No (public by design) | M1 | Auth client; the publishable key (`sb_publishable_…`) or a legacy anon key. Replaces the planned `…_ANON_KEY` name because Supabase is deprecating anon/service-role keys by the end of 2026 |
 | `NEXT_PUBLIC_API_BASE_URL` | web | No | M1 | FastAPI base URL for the browser; compiled in at build time; required for production builds |
 | `API_INTERNAL_BASE_URL` | web (server) | No | M1 | Address server-rendered pages use to reach the API (Docker: `http://api:8000`); defaults to the public URL |
 | `LLM_PROVIDER` | api, worker | No | M3 | `gemini` · `openai` · `fake` (not allowed in staging/production) |
@@ -372,13 +376,15 @@ All configuration is environment-based and validated at startup (Pydantic Settin
 | Broken object-level authorization (reading another user's goal, lesson, attempt) | Service-layer ownership checks + RLS in the request transaction + 404 on non-owned IDs + cross-user tests at API and database level |
 | Answer-key exposure | Separate `question_answer_keys` table with no client-role grants; keys read only inside grading; response-shape tests assert the absence of key and explanation fields before submission |
 | Forged or replayed tokens | Signature, `aud`, `iss`, `exp` checks; short-lived access tokens; clock-skew tolerance bounded |
+| Session theft through cross-site scripting | Session cookies are `HttpOnly` and written only by the server; Supabase's browser client is not used, so no token is readable by page scripts; security headers (`X-Frame-Options`, `nosniff`, referrer policy) |
+| Valid token for a deleted or locked-out account | Profile lookup in the request transaction fails closed with 401 `ACCOUNT_NOT_FOUND`; the sign-in page for `session_ended` shows the form instead of looping (ADR-024); access tokens are short-lived |
 | Service credential leakage | Server-only env; no `NEXT_PUBLIC_` prefix on secrets; secret scanning in CI (the repository is public); `.env*` git-ignored |
 | Prompt injection via uploaded documents or goal text | Delimited data blocks; "data not instructions" system prompt; the model has **no tools** and cannot act; outputs validated by code; IDs and paths from model output re-checked against the database |
 | Malicious uploads | Size/type limits at the bucket and API, magic-byte validation, parsing in the worker with limits, no inline serving, private bucket + short-lived signed URLs |
 | Cost abuse / denial of wallet | Per-user budgets checked before any model call, rate limits, bounded retries, token ceilings, usage ledger |
 | Duplicate/replayed submissions | Idempotency keys + database uniqueness |
 | Information leakage in logs/errors | Structured logs exclude prompts, document text and tokens by default; generic error bodies with request ID |
-| Cross-site request abuse | Bearer tokens (not ambient cookies) for API auth; strict CORS allow-list |
+| Cross-site request abuse | The API accepts only Bearer tokens, never cookies, so it is not exposed to CSRF; the web app's cookie-authenticated Server Actions rely on `SameSite=Lax` cookies plus Next.js's Origin/Host check for Server Actions; sign-out is a POST form; strict CORS allow-list |
 | Supply chain | Lockfiles (`uv.lock`, `package-lock.json`), Dependabot, `pip-audit`/`npm audit` in CI |
 
 Data-protection notes: documents and performance history are sensitive; minimise what is stored, support deletion including storage, and disclose that content is processed by the configured AI provider. Revisit before serving minors (assumption A9).
@@ -391,18 +397,19 @@ Data-protection notes: documents and performance history are sensitive; minimise
 |---|---|---|
 | Backend unit | pytest | Services, validators, scoring, scheduling, settings validation, JWT verification (with locally generated keys) |
 | Schema/contract | pytest + Pydantic | DTOs, lesson/quiz/roadmap schemas, malformed-output rejection |
-| Database | **pgTAP** (`supabase test db`) | RLS per role, grants, constraints, composite-FK ownership, answer-key isolation |
-| Backend integration | pytest against a real Postgres from the Supabase stack | Repositories, RLS-scoped sessions, queue claim/lease/retry/idempotency, migration drift test |
+| Database | pytest against a real PostgreSQL 16 (ADR-022) | RLS per role, grants, constraints, deleted-account behaviour, guard tests that fail the build if a `public` table lacks RLS or exposes anything to `anon`; composite-FK ownership and answer-key isolation join in M5 |
+| Backend integration | pytest: the real app in-process against that PostgreSQL, with real signed tokens | The auth matrix (valid, missing, malformed, expired, wrong algorithm/audience/issuer, anonymous), cross-user access, validation, pool isolation, failure handling; queue claim/lease/retry/idempotency from M3 |
+| Genuine Supabase | pytest `tests/supabase_stack` against `supabase start` (CI only) | Real Supabase Auth tokens, the profile trigger on a real `auth.users` insert, RLS under Supabase's own roles, PostgREST cannot reach the tables, sign-out ends the session |
 | AI evaluation | pytest with fixtures and `FakeProvider`/recorded outputs | Hallucinated citations, malformed output, duplicate questions, contradictory answer keys, incomplete syllabi, plan feasibility |
 | Frontend | Vitest + Testing Library | Form validation, loading/error/empty states, navigation |
-| End-to-end | Playwright | Sign up → goal → roadmap → lesson → quiz → feedback → resume; **user B cannot see user A's data** |
+| End-to-end | Playwright (`apps/web/e2e`, CI only) | Implemented for M1: sign up → goal → reload → sign out → sign in → **user B cannot see user A's data**. Extended each milestone toward roadmap → lesson → quiz → feedback → resume |
 | External | Marked and run separately | Real provider/YouTube calls; never part of the default CI path |
 
 Rule carried from the source brief: **no claim of passing tests unless they were executed and their output observed.**
 
 ### CI (GitHub Actions, built in M1)
 
-Jobs: API (ruff format/lint, pyright, pytest unit) · Database (Supabase stack up, `db reset`, pgTAP, integration + drift tests) · Web (ESLint, `tsc`, Vitest, build) · Contracts (regenerate OpenAPI client, fail on diff) · E2E (Playwright, on pull requests once M1 lands) · Security (secret scan, dependency audit). CI is the **authoritative** verification environment for database-dependent tests because the primary dev machine cannot run the Supabase stack locally (§15).
+Jobs: **API** (ruff format/lint, pyright, pytest against a PostgreSQL service container) · **Web** (Prettier, ESLint, `tsc`, Vitest, the contracts drift check that regenerates the OpenAPI types and fails on any diff, production build, `npm audit`) · **Supabase stack** (`supabase start` applies every migration, then the genuine-stack API tests and the Playwright journey run) · **Docker** (build and boot the images) · **Secret scan**. CI is the **authoritative** environment for anything that needs the genuine Supabase stack, because the primary dev machine cannot run Docker (§15); the database tests also run locally against a real PostgreSQL. Until the `supabase-stack` job has been observed green, the genuine-Supabase claims in this document are unproven.
 
 ### Observability and cost
 
@@ -425,6 +432,7 @@ Node 24 + npm workspaces · Python 3.14 via `uv` (`.python-version`, `uv.lock`) 
 | Python **3.14.7** (uv-managed) works: `ssl`, `httpx` HTTPS, `pydantic-core`, `cryptography`, `orjson`, `psycopg[binary]`, `asyncpg`, FastAPI, uvicorn all import and run | Imports and an HTTPS request succeeded | **Backend targets Python 3.14.** |
 | Node natives load: `@next/swc`, `@tailwindcss/oxide`, `lightningcss`, `esbuild`, `rollup`. **`@swc/core` fails to load its native binding** (exact cause not captured; consistent with the policy above) | Loaded / failed under Node 24 | Do not depend on `@swc/core` (Next.js does not need it). |
 | Supabase CLI runs when installed from npm (2.120.0) | `supabase --version` succeeded | Use it as a dev dependency. |
+| **Verdicts change over time (observed 2026-10-10).** The venv launcher `services/api/.venv/Scripts/python.exe` and `ruff.exe`, both of which ran the day before, were blocked (`os error 4551`); recreating the venv did not help. The base interpreter, Node, Git and the `pgserver` PostgreSQL binaries still ran | Re-ran pytest and pyright through the base interpreter with `PYTHONPATH` pointing at the venv's site-packages: 250 passed, 1 skipped, 0 type errors | Do not assume a tool that worked yesterday works today. The fallback recipe is in DEVELOPMENT.md; `ruff` is verified in CI while it is blocked. Never disable the setting. |
 | `LongPathsEnabled = 0` | Registry value | Keep the checkout path short (for example `C:\dev\StudyPilot`). `node_modules` will exceed 260 characters inside deep application-data folders. |
 | **No Docker, no WSL, no `psql`, no `gh`, no `pnpm`** | Command lookups; `wsl` reports the component is not registered | The local Supabase stack **cannot run on this machine as-is**. See below. |
 | `git` identity unset; Git defaults new repos to `master`; `core.autocrlf=true` | `git config` | The repo uses `main`, LF line endings via `.gitattributes`, and a per-repo identity. |
@@ -433,10 +441,11 @@ Node 24 + npm workspaces · Python 3.14 via `uv` (`.python-version`, `uv.lock`) 
 
 In order of preference:
 
-1. **CI as the gate** — pgTAP, migration, drift, integration and E2E jobs run in GitHub Actions where Docker is available. Local work is limited to unit tests and linters.
-2. **A hosted Supabase dev project** — the API and web app run locally against it; integration tests are opt-in (`RUN_INTEGRATION=1`) and use disposable test users. Never point tests at production.
-3. **GitHub Codespaces / a dev container** (`.devcontainer/`, added in M1) — a Linux environment with Docker-in-Docker, giving the full local stack.
-4. **Install WSL2 + Docker Desktop** — possible, but needs administrator action, and Smart App Control may block parts of it; treat as unproven until tried.
+1. **A real PostgreSQL without Docker (used since M1b)** — the `pgserver` wheel runs PostgreSQL 16 on Windows; the API tests apply the real migrations to it (ADR-022). It covers constraints, grants, RLS and the request-transaction pattern, but not Supabase's own Auth service.
+2. **CI as the gate** — pgTAP, migration, drift, integration and E2E jobs run in GitHub Actions where Docker is available. Local work is limited to unit tests and linters.
+3. **A hosted Supabase dev project** — the API and web app run locally against it; integration tests are opt-in (`RUN_INTEGRATION=1`) and use disposable test users. Never point tests at production.
+4. **GitHub Codespaces / a dev container** (`.devcontainer/`, added in M1) — a Linux environment with Docker-in-Docker, giving the full local stack.
+5. **Install WSL2 + Docker Desktop** — possible, but needs administrator action, and Smart App Control may block parts of it; treat as unproven until tried.
 
 ## 16. Deployment topology
 
@@ -446,7 +455,7 @@ In order of preference:
 | API | Render web service from `services/api/Dockerfile` | Health check `/readyz` |
 | Worker | Render background worker, same image, command `python -m app.workers` | Scale independently of the API |
 | Database, Auth, Storage | Supabase managed | Separate projects for staging and production |
-| Database connection | Supabase pooler in **session mode** for the long-lived API and worker | Direct connections are IPv6-only on some plans and Render may lack IPv6 egress; transaction mode needs prepared statements disabled. **[verify]** current pooler modes and IPv4/IPv6 behaviour before choosing (M2 deploy skeleton). |
+| Database connection | Supabase pooler in **session mode** for the long-lived API and worker | **Verified against Supabase's docs on 2026-10-10:** the shared pooler is IPv4-reachable on every plan (session mode on port 5432, transaction mode on 6543); direct connections are IPv6-only unless the IPv4 add-on is bought; transaction mode does not support prepared statements (the API's pool disables them). Whether Render has IPv6 egress is still to be confirmed at the M2 deploy skeleton. |
 
 Environments: `local` → `staging` (preview/branch) → `production`. Migrations run in CI on merge: staging automatically; production after a manual approval. A **walking-skeleton deployment** (health endpoints plus the goals slice) happens at the end of M2 so deployment surprises appear early, not at the end.
 
@@ -455,11 +464,11 @@ Environments: `local` → `staging` (preview/branch) → `production`. Migration
 | ID | Decision | Alternatives considered | Rationale | Status |
 |---|---|---|---|---|
 | ADR-001 | Modular monolith; one Python package with API and worker entrypoints | Microservices; separate worker repo | Smallest operational surface; shared domain code | Accepted |
-| ADR-002 | Supabase SQL migrations are the schema source of truth; SQLAlchemy is access-layer only; drift test in CI | Alembic; ORM-generated DDL | RLS, grants, `auth` triggers and storage policies are SQL-native; avoids two migration systems | Accepted |
+| ADR-002 | Supabase SQL migrations are the schema source of truth; no ORM-generated DDL (data access: ADR-021) | Alembic; ORM-generated DDL | RLS, grants, `auth` triggers and storage policies are SQL-native; avoids two migration systems | Accepted (amended by ADR-021) |
 | ADR-003 | PostgreSQL-backed queue (`SKIP LOCKED`, leases) on `generation_jobs` | Redis + RQ/Arq/Celery; pgmq; Procrastinate | One durable store, transactional enqueue, no extra service; revisit on measured need | Accepted |
 | ADR-004 | Browsers/mobile use Supabase for Auth only; all data via FastAPI; Data API not exposed for app tables | Direct PostgREST from clients | Keeps business rules and answer keys server-side; one API surface | Accepted |
-| ADR-005 | Clients call FastAPI directly with a Bearer token; no Next.js BFF | BFF proxy in route handlers | Same contract for web and Expo; avoids a second API layer | Accepted |
-| ADR-006 | User requests run in RLS-scoped transactions (`SET LOCAL ROLE authenticated` + claims); a separate privileged session for worker and key reads | Service-role connection with manual `user_id` filters only | A forgotten filter cannot leak data | **Proposed — validate in spike S1** |
+| ADR-005 | Clients call FastAPI directly with a Bearer token; no Next.js BFF | BFF proxy in route handlers | Same contract for web and Expo; avoids a second API layer | Accepted (web amended by ADR-023) |
+| ADR-006 | User requests run in RLS-scoped transactions (`SET LOCAL ROLE authenticated` + claims); a separate privileged session for worker and key reads | Service-role connection with manual `user_id` filters only | A forgotten filter cannot leak data | Accepted (S1: verified on PostgreSQL 16; genuine Supabase via the CI stack job) |
 | ADR-007 | Answer keys and explanations live in `question_answer_keys` with no client grants | Same table with column privileges; views | RLS is row-level; separate table removes the leak path entirely | Accepted |
 | ADR-008 | pgvector `vector(1536)`, HNSW cosine, hybrid FTS; `embedding_model` stored per chunk | Pinecone/FAISS; 768/3072 dims | Matches source schema; no extra service; safe model changes | Accepted (model **[verify]**) |
 | ADR-009 | `LLMProvider` interface, schema-constrained outputs + Pydantic re-validation; Gemini adapter first, OpenAI second; `FakeProvider` for tests only | Provider SDKs called from business logic; LangChain-style frameworks | Swappable provider, deterministic tests, no framework lock-in | Accepted (provider order: assumption A4) |
@@ -474,6 +483,10 @@ Environments: `local` → `staging` (preview/branch) → `production`. Migration
 | ADR-018 | Keep Next.js **Cache Components** and Partial Prefetching enabled (the `create-next-app` default). Anything per-request starts with `await connection()` under `<Suspense>`; live route handlers do the same | Disable Cache Components; opt out per route | It is the documented direction of Next 16 and supports streaming shells with dynamic data; dev mode surfaced the `Date.now()` rule immediately, so mistakes are loud | Accepted (verified in M1a) |
 | ADR-019 | UI foundation: shadcn/ui with **Radix** primitives ("nova" style) copied into `components/ui` and adapted to our tokens; class merging via the shadcn-maintained `cn` package | Base UI primitives; Material/Chakra; clsx + tailwind-merge | Owned, accessible, minimal-dependency components; `cn` provenance verified on npm (maintainer and repository) | Accepted |
 | ADR-020 | Python tooling is invoked as `python -m <tool>` (never the generated launcher executables); API entrypoint is `uvicorn app.main:create_app --factory`; the test-client dependency is `httpx2` | Console-script launchers; module-level `app = create_app()`; `httpx` | Smart App Control blocks the `pytest.exe` launcher that `uv` generates; `--factory` keeps imports free of side effects; Starlette 1.7 deprecates `httpx` in its TestClient in favour of `httpx2` (provenance verified) | Accepted (verified) |
+| ADR-021 | Data access is psycopg 3 + `psycopg_pool` with explicit, parameterised SQL in repositories; row shapes are Pydantic models; no ORM | SQLAlchemy 2.x (the original plan); asyncpg | With user-scoped transactions and column-level grants the SQL *is* the design; there are no models to drift from the migrations; fewer moving parts; the role/claims pattern and pool isolation were verified under test (S1) | Accepted (verified) |
+| ADR-022 | Database tests run in pytest against a **real PostgreSQL 16** (the `pgserver` wheel locally, a service container in CI) after applying a minimal stand-in for Supabase's roles and `auth` schema plus every real migration; a separate CI job repeats the essentials on a genuine `supabase start` stack. pgTAP is not used | pgTAP via `supabase test db`; PGlite; mocks | No Docker on the dev machine, and tests must run where the work is done. PGlite was tried and dropped (its socket multiplexer desynchronised after errors). The stand-in is a known risk; the genuine-stack job exists to cover it | Accepted (stack job unobserved until CI runs) |
+| ADR-023 | The web app's session cookies are `HttpOnly` and written only by the server; Server Components and Server Actions call FastAPI with the token read server-side; Supabase's browser client is not used. Amends ADR-005 for the web: the API contract is unchanged and mobile will still call it directly with a Bearer token | Script-readable cookies (the library default); browser client with `localStorage` | An XSS bug cannot read the tokens, and the API accepts only Bearer tokens so it is not exposed to CSRF. Cost: no client-side Supabase features (realtime, direct uploads) without revisiting this | Accepted |
+| ADR-024 | Route protection has three independent gates: the proxy (UX redirects), a server-side session check in every protected page, and token verification in the API. When the API rejects a session Supabase still holds, the user is sent to `/sign-in?…&error=session_ended`, which shows the form instead of bouncing them back | Proxy-only protection; clearing cookies in a GET handler | "Never rely on frontend-only protection"; the marker prevents the redirect loop that a deleted account or a key-mode mismatch would otherwise cause (found in review; covered by tests) | Accepted |
 
 ## 18. Deviations from the source brief
 
@@ -494,3 +507,6 @@ Environments: `local` → `staging` (preview/branch) → `production`. Migration
 | Backend with service-role access | RLS-scoped request transactions + privileged session | Defence in depth |
 | PostgREST available by default | Not exposed for application tables | One API surface; keys stay server-side |
 | Python version unspecified | Python 3.14 | The only version verified to run the stack on the dev machine |
+| SQLAlchemy models with a CI drift test | psycopg 3 and explicit SQL (ADR-021) | No models means nothing to drift; fewer layers between a request and its RLS-scoped transaction |
+| pgTAP tests beside each migration | pytest database tests against a real PostgreSQL (ADR-022) | They run on the machine where the work is done, with the same code path as production |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase is replacing anon/service-role keys with publishable/secret keys (legacy keys deprecated by the end of 2026) |
