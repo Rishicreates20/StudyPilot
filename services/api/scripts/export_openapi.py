@@ -26,7 +26,11 @@ def build_document() -> dict[str, object]:
 def main() -> None:
     document = build_document()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # newline="\n": the same bytes on every platform, so the CI drift check cannot trip over
+    # Windows line endings.
+    OUTPUT.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
     print(f"Wrote {OUTPUT}")
 
 

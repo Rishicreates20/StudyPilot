@@ -499,7 +499,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Run every registered dependency check; respond 503 if any fails.\n\nNo dependencies exist yet, so with an empty registry the service is trivially ready.\nThe database check is registered when persistence lands.",
+        "description": "Run every registered dependency check; respond 503 if any fails.\n\nThe database check is registered at startup (see `app.main`); with an empty registry (tests\nthat run without a database) the service is trivially ready.",
         "operationId": "readyz_readyz_get",
         "responses": {
           "200": {

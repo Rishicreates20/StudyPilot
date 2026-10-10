@@ -35,8 +35,8 @@ export interface paths {
          * Readiness probe
          * @description Run every registered dependency check; respond 503 if any fails.
          *
-         *     No dependencies exist yet, so with an empty registry the service is trivially ready.
-         *     The database check is registered when persistence lands.
+         *     The database check is registered at startup (see `app.main`); with an empty registry (tests
+         *     that run without a database) the service is trivially ready.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
