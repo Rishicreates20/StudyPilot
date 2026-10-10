@@ -1,0 +1,18 @@
+{
+  "name": "@studypilot/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript types for the StudyPilot HTTP API, generated from the API's OpenAPI document. Do not edit src/schema.d.ts by hand: run `npm run contracts:generate` from the repository root.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o src/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0"
+  }
+}

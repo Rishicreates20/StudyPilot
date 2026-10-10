@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
+import { AuthNav } from "@/components/auth/auth-nav";
 import { Logo } from "@/components/brand/logo";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { NavLinks } from "@/components/layout/nav-links";
@@ -22,6 +24,10 @@ export function SiteHeader() {
           <NavLinks items={primaryNav} />
         </nav>
         <div className="ml-auto flex items-center gap-1">
+          {/* Reads the session, so it renders per request; the rest of the header stays static. */}
+          <Suspense fallback={<div className="h-9 w-24" aria-hidden="true" />}>
+            <AuthNav />
+          </Suspense>
           <ThemeToggle />
         </div>
       </div>

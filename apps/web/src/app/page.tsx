@@ -52,13 +52,16 @@ export default function HomePage() {
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
               <Button asChild size="lg" className="w-full sm:w-auto">
-                <Link href="#how-it-works">
-                  See how it will work
+                <Link href="/sign-up">
+                  Create your account
                   <ArrowRightIcon aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <Link href="/status">Check system status</Link>
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button asChild size="lg" variant="ghost" className="w-full sm:w-auto">
+                <Link href="#how-it-works">See how it will work</Link>
               </Button>
             </div>
           </div>
@@ -75,8 +78,8 @@ export default function HomePage() {
               One loop: plan, learn, test, adapt
             </h2>
             <p className="text-muted-foreground">
-              This is what is being built. Accounts, goals and AI-generated roadmaps arrive in the
-              next milestones; today this app provides the foundation they will run on.
+              This is what is being built. Accounts and learning goals work today; AI-generated
+              roadmaps, lessons and quizzes arrive in the next milestones.
             </p>
           </div>
           <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

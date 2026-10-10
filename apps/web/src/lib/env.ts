@@ -5,8 +5,12 @@
  *   never hold secrets. They are read through literal `process.env.NAME` accesses below
  *   because Next.js can only inline those.
  * - Server-only variables (no prefix) are read at runtime and never reach the browser.
- * - Development and tests fall back to local defaults. Production builds and servers require
- *   explicit values so a misconfigured deployment fails loudly instead of pointing at localhost.
+ * - Development and tests fall back to local defaults, and may leave Supabase unconfigured (the
+ *   UI then explains what to set). Production builds and servers require explicit values so a
+ *   misconfigured deployment fails loudly instead of pointing at localhost.
+ *
+ * The Supabase publishable (or legacy anon) key is designed to be public: it only identifies the
+ * project to Supabase Auth. The service-role / secret key must NEVER be set here.
  *
  * Validation errors name the variable and the problem but never echo the supplied value.
  */
@@ -36,16 +40,42 @@ const httpUrl = () =>
     .transform(withoutTrailingSlash);
 
 function publicSchema(allowDefaults: boolean) {
-  return z.object({
-    NEXT_PUBLIC_APP_NAME: z.preprocess(
-      blankToUndefined,
-      z.string().trim().min(1).max(60).default(DEFAULT_APP_NAME),
-    ),
-    NEXT_PUBLIC_API_BASE_URL: z.preprocess(
-      blankToUndefined,
-      allowDefaults ? httpUrl().default(DEFAULT_API_BASE_URL) : httpUrl(),
-    ),
-  });
+  return z
+    .object({
+      NEXT_PUBLIC_APP_NAME: z.preprocess(
+        blankToUndefined,
+        z.string().trim().min(1).max(60).default(DEFAULT_APP_NAME),
+      ),
+      NEXT_PUBLIC_API_BASE_URL: z.preprocess(
+        blankToUndefined,
+        allowDefaults ? httpUrl().default(DEFAULT_API_BASE_URL) : httpUrl(),
+      ),
+      NEXT_PUBLIC_SUPABASE_URL: z.preprocess(blankToUndefined, httpUrl().optional()),
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.preprocess(
+        blankToUndefined,
+        z.string().trim().min(10, "looks too short to be a Supabase key").max(2000).optional(),
+      ),
+    })
+    .superRefine((env, context) => {
+      const hasUrl = env.NEXT_PUBLIC_SUPABASE_URL !== undefined;
+      const hasKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY !== undefined;
+      // Both or neither. Neither is only acceptable where defaults are (development, tests).
+      if (hasUrl === hasKey && (hasUrl || allowDefaults)) return;
+      if (!hasUrl) {
+        context.addIssue({
+          code: "custom",
+          path: ["NEXT_PUBLIC_SUPABASE_URL"],
+          message: "is required together with NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        });
+      }
+      if (!hasKey) {
+        context.addIssue({
+          code: "custom",
+          path: ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"],
+          message: "is required together with NEXT_PUBLIC_SUPABASE_URL",
+        });
+      }
+    });
 }
 
 const serverOnlySchema = z.object({
@@ -55,6 +85,7 @@ const serverOnlySchema = z.object({
 
 export type PublicEnv = z.output<ReturnType<typeof publicSchema>>;
 export type ServerEnv = PublicEnv & { API_INTERNAL_BASE_URL: string };
+export type SupabaseConfig = { readonly url: string; readonly publishableKey: string };
 
 export class EnvValidationError extends Error {
   readonly issues: readonly string[];
@@ -95,10 +126,19 @@ export function parseServerEnv(raw: RawEnv, allowDefaults: boolean = !isProducti
   };
 }
 
+/** The Supabase project to authenticate against, or null when auth is not configured. */
+export function supabaseConfigOf(env: PublicEnv): SupabaseConfig | null {
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  return url && publishableKey ? { url, publishableKey } : null;
+}
+
 // Literal property accesses are required for Next.js to inline NEXT_PUBLIC_* values.
 const readRawEnv = (): RawEnv => ({
   NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   API_INTERNAL_BASE_URL: process.env.API_INTERNAL_BASE_URL,
 });
 
@@ -108,6 +148,10 @@ let cachedServer: ServerEnv | undefined;
 export function getPublicEnv(): PublicEnv {
   cachedPublic ??= parsePublicEnv(readRawEnv());
   return cachedPublic;
+}
+
+export function getSupabaseConfig(): SupabaseConfig | null {
+  return supabaseConfigOf(getPublicEnv());
 }
 
 /** Server-only: includes variables that must not be exposed to the browser. */

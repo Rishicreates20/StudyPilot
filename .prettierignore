@@ -6,3 +6,6 @@ package-lock.json
 services/api
 *.md
 next-env.d.ts
+packages/contracts/openapi.json
+packages/contracts/src/schema.d.ts
+supabase/templates
