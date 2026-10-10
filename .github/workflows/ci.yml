@@ -17,10 +17,27 @@ jobs:
   api:
     name: API · format, lint, types, tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: services/api
+    # A real PostgreSQL for the database tests. The suite applies the Supabase stand-in
+    # (tests/support/supabase_stub.sql) and every file in supabase/migrations to it. The genuine
+    # Supabase stack is exercised separately by the supabase-stack job below.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,12 +54,15 @@ jobs:
       - run: uv run python -m pytest
 
   web:
-    name: Web · format, lint, types, tests, build
+    name: Web · format, lint, types, tests, contracts, build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
-      # Required for production builds (see apps/web/.env.example). Public by design.
+      # Required for production builds (see apps/web/.env.example). Public by design, and
+      # placeholders here: this build is only checked, never deployed.
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_value
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,15 +71,72 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # The TypeScript API types are generated from the API's OpenAPI document, so the API's
+      # dependencies are needed to prove the committed types are current.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+      - run: uv sync --frozen --directory services/api
       - run: npm ci
       - name: Formatting
         run: npx prettier --check .
       - run: npm run lint:web
       - run: npm run typecheck:web
       - run: npm run test:web
+      - name: API contract is up to date (fails if openapi.json / schema.d.ts have drifted)
+        run: npm run contracts:check
       - run: npm run build
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+  supabase-stack:
+    name: Supabase · migrations, real auth, row security, browser flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+      - run: npm ci
+      - run: uv sync --frozen --directory services/api
+      # `supabase start` creates the database and applies every file in supabase/migrations.
+      # Optional services are skipped; Auth (GoTrue), the API gateway and PostgREST stay, because
+      # one test proves PostgREST cannot reach the application tables.
+      - name: Start Supabase and apply the migrations
+        run: >-
+          npx --no-install supabase start
+          -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Export the stack's settings to the next steps
+        run: python3 .github/scripts/supabase_stack_env.py
+      - name: API tests against the genuine stack (real tokens, real roles, real RLS)
+        working-directory: services/api
+        run: uv run python -m pytest tests/supabase_stack -v
+      - name: Build the web app against the stack
+        run: npm run build
+      - name: Install the test browser
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+      - name: Browser flow (sign up, goal, reload, sign out, sign in, second user)
+        working-directory: apps/web
+        run: npm run e2e
+      - name: Diagnostics
+        if: failure()
+        run: |
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' || true
+          for name in $(docker ps -a --format '{{.Names}}' | grep -E 'auth|db|kong|rest' || true); do
+            echo "::group::logs of $name"
+            docker logs --tail 80 "$name" 2>&1 || true
+            echo "::endgroup::"
+          done
 
   docker:
     name: Docker · build images and boot the stack
@@ -79,7 +156,10 @@ jobs:
       - name: Build web images (runtime and dev targets)
         run: |
           docker build -f apps/web/Dockerfile --target runtime \
-            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 -t studypilot-web:ci .
+            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co \
+            --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder_value \
+            -t studypilot-web:ci .
           docker build -f apps/web/Dockerfile --target dev -t studypilot-web:ci-dev .
       - name: Boot the runtime images and check every health endpoint
         run: |

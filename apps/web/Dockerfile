@@ -2,11 +2,14 @@
 #
 # Web image. Build context is the REPOSITORY ROOT (npm workspaces):
 #   docker build -f apps/web/Dockerfile -t studypilot-web \
-#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com .
+#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com \
+#     --build-arg NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co \
+#     --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key> .
 #   docker build -f apps/web/Dockerfile -t studypilot-web:dev --target dev .
 #
 # NEXT_PUBLIC_* values are compiled into the browser bundle at build time, so they must be
-# supplied as build arguments. They are public by design: never pass a secret this way.
+# supplied as build arguments. They are public by design: never pass a secret this way. In
+# particular the Supabase service-role / secret key must never reach this image.
 
 FROM node:24-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -16,10 +19,12 @@ WORKDIR /repo
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
+COPY packages/contracts/package.json packages/contracts/
 RUN npm ci
 
 # --- Development image: source is bind-mounted by Compose ------------------------------------
 FROM deps AS dev
+COPY packages/contracts /repo/packages/contracts
 WORKDIR /repo/apps/web
 COPY apps/web ./
 ENV NODE_ENV=development
@@ -28,11 +33,16 @@ CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]
 
 # --- Production build ------------------------------------------------------------------------
 FROM deps AS build
+COPY packages/contracts packages/contracts
 COPY apps/web apps/web
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_APP_NAME=StudyPilot
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
     NEXT_OUTPUT=standalone
 RUN npm run build --workspace @studypilot/web
 
