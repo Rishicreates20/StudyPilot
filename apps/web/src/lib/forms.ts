@@ -8,9 +8,14 @@ export type FieldErrors<K extends string> = Partial<Record<K, string>>;
  *
  * `values` echoes back what the user typed (never passwords) because React resets uncontrolled
  * forms after an action completes; the inputs use it as their `defaultValue`.
+ *
+ * `success` is for forms that stay on the page after saving (settings): the message confirms it
+ * and `values` are what was saved, because the form resets to its defaults after an action and
+ * must show the new values, not the old ones.
  */
 export type FormState<K extends string, V = Partial<Record<K, string>>> =
   | { readonly status: "idle" }
+  | { readonly status: "success"; readonly message: string; readonly values?: V }
   | {
       readonly status: "error";
       readonly formError?: string;
@@ -32,4 +37,9 @@ export function zodFieldErrors<K extends string>(error: z.ZodError): FieldErrors
 export function formString(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
+}
+
+/** Every string value of a repeated form field (checkbox groups), in submitted order. */
+export function formStrings(formData: FormData, name: string): string[] {
+  return formData.getAll(name).filter((value): value is string => typeof value === "string");
 }

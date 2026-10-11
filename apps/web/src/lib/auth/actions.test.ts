@@ -117,10 +117,10 @@ describe("signUpAction", () => {
     password: "correct horse battery",
   };
 
-  it("creates the account with the display name as profile metadata", async () => {
+  it("creates the account with the display name as profile metadata, then starts onboarding", async () => {
     auth.signUp.mockResolvedValue({ data: { session: { access_token: "x" } }, error: null });
 
-    await expect(signUpAction(idle, form(details))).rejects.toThrow("REDIRECT:/dashboard");
+    await expect(signUpAction(idle, form(details))).rejects.toThrow("REDIRECT:/onboarding");
     expect(auth.signUp).toHaveBeenCalledWith({
       email: "ada@example.com",
       password: "correct horse battery",

@@ -24,10 +24,15 @@ export async function AuthNav() {
     );
   }
 
+  // Below the `sm` breakpoint these links live in the phone menu (AuthMobileMenu): the header has
+  // no room for them next to the logo, the menu button and the theme toggle.
   return (
-    <div className="flex items-center gap-1">
+    <div className="hidden items-center gap-1 sm:flex">
       <Button asChild variant="ghost" size="sm">
         <Link href="/dashboard">Dashboard</Link>
+      </Button>
+      <Button asChild variant="ghost" size="sm">
+        <Link href="/settings">Settings</Link>
       </Button>
       {user.email ? (
         <span className="hidden max-w-44 truncate text-sm text-muted-foreground lg:inline">

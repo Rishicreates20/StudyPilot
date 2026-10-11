@@ -1,7 +1,7 @@
 "use client";
 
 import { MenuIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Logo } from "@/components/brand/logo";
 import { NavLinks } from "@/components/layout/nav-links";
@@ -16,7 +16,14 @@ import {
 } from "@/components/ui/sheet";
 import type { NavItem } from "@/lib/site";
 
-export function MobileNav({ items, siteName }: { items: readonly NavItem[]; siteName: string }) {
+type MobileNavProps = {
+  items: readonly NavItem[];
+  siteName: string;
+  /** Extra content under the links (the account links), rendered on the server. */
+  children?: ReactNode;
+};
+
+export function MobileNav({ items, siteName, children }: MobileNavProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -36,6 +43,7 @@ export function MobileNav({ items, siteName }: { items: readonly NavItem[]; site
         <nav aria-label="Mobile" className="px-4">
           <NavLinks items={items} orientation="vertical" onNavigate={() => setOpen(false)} />
         </nav>
+        {children}
       </SheetContent>
     </Sheet>
   );

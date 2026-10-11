@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 /**
- * The acceptance scenario for authentication, in a real browser against real Supabase Auth:
- * create an account, stay signed in, own data, sign out, sign back in, and never see another
- * user's data. Nothing here fakes a session: every cookie is set by Supabase through the app.
+ * The acceptance scenario, in a real browser against real Supabase Auth and the real API:
+ *
+ *   sign up → onboarding → a goal on the dashboard → edit → reload and it is still there →
+ *   settings persist → pause / complete / archive / restore / delete (with confirmations) →
+ *   sign out → sign back in → another user can see and change none of it.
+ *
+ * Nothing here fakes a session: every cookie is set by Supabase through the app. The one place a
+ * test reads the session is to prove a *different* account's real token cannot touch these goals.
  */
 
 const API_URL = process.env.E2E_API_URL ?? "http://127.0.0.1:8000";
@@ -27,21 +32,53 @@ async function signUp(page: Page, learner: Learner) {
   await page.getByLabel("Email").fill(learner.email);
   await page.getByLabel("Password", { exact: true }).fill(learner.password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  // A new account starts with the short setup.
+  await expect(page).toHaveURL(/\/onboarding$/);
 }
 
-async function signIn(page: Page, learner: Learner, password = learner.password) {
+/** Submit the sign-in form and return without waiting (for attempts that are meant to fail). */
+async function attemptSignIn(page: Page, learner: Learner, password = learner.password) {
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(learner.email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-async function createGoal(page: Page, title: string) {
+/** Sign in and wait until the session is really established (the dashboard has loaded). */
+async function signIn(page: Page, learner: Learner) {
+  await attemptSignIn(page, learner);
+  await expect(page).toHaveURL(/\/dashboard$/);
+}
+
+async function skipOnboarding(page: Page) {
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page).toHaveURL(/\/dashboard\?notice=skipped$/);
+}
+
+async function createGoal(page: Page, title: string, extra?: { targetDate?: string }) {
   await page.goto("/goals/new");
   await page.getByLabel("What do you want to learn?").fill(title);
+  if (extra?.targetDate) await page.getByLabel(/Target date/).fill(extra.targetDate);
   await page.getByRole("button", { name: "Create goal" }).click();
-  await expect(page).toHaveURL(/\/dashboard\?created=1$/);
+  await expect(page).toHaveURL(/\/dashboard\?notice=created$/);
+}
+
+async function openGoal(page: Page, title: string) {
+  await page.goto("/dashboard");
+  await page.getByRole("link", { name: title }).click();
+  await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
+  return page.url().split("/goals/")[1] ?? "";
+}
+
+/** The access token of the signed-in browser context, read from Supabase's session cookie. */
+async function accessTokenOf(context: BrowserContext): Promise<string> {
+  const cookies = (await context.cookies())
+    .filter((cookie) => /^sb-.*-auth-token(\.\d+)?$/.test(cookie.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  expect(cookies.length).toBeGreaterThan(0);
+  const joined = cookies.map((cookie) => cookie.value).join("");
+  const json = Buffer.from(joined.replace(/^base64-/, ""), "base64url").toString("utf8");
+  return (JSON.parse(json) as { access_token: string }).access_token;
 }
 
 async function freshContext(browser: Browser) {
@@ -49,42 +86,228 @@ async function freshContext(browser: Browser) {
   return { context, page: await context.newPage() };
 }
 
-test.describe("authentication and goals", () => {
+function bearer(token: string) {
+  return { Authorization: `Bearer ${token}` };
+}
+
+test.describe("onboarding, goals and the dashboard", () => {
   test.describe.configure({ mode: "serial" });
 
   const ada = newLearner("ada");
-  const goalTitle = `Learn Kubernetes ${randomUUID().slice(0, 6)}`;
+  const firstGoal = `Learn Kubernetes ${randomUUID().slice(0, 6)}`;
+  const renamedGoal = `${firstGoal} (renamed)`;
+  const secondGoal = `Pass the CKA exam ${randomUUID().slice(0, 6)}`;
+  let firstGoalId = "";
 
   test("signed-out visitors cannot reach protected pages or the API", async ({ page, request }) => {
-    await page.goto("/dashboard");
-    await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
+    for (const path of ["/dashboard", "/onboarding", "/settings", "/goals/new"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL(new RegExp(`/sign-in\\?next=${encodeURIComponent(path)}$`));
+    }
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
-    // The page redirect is a convenience; the API refuses on its own account.
-    const response = await request.get(`${API_URL}/v1/goals`);
-    expect(response.status()).toBe(401);
+    // The page redirects are a convenience; the API refuses on its own account.
+    for (const path of ["/v1/me", "/v1/goals", "/v1/goals/summary"]) {
+      expect((await request.get(`${API_URL}${path}`)).status()).toBe(401);
+    }
   });
 
-  test("a new user can create an account and lands on their dashboard", async ({ page }) => {
+  test("a new user is welcomed, answers two questions and creates a first goal without a date", async ({
+    page,
+  }) => {
     await signUp(page, ada);
 
-    await expect(page.getByRole("heading", { name: "Your learning goals" })).toBeVisible();
-    await expect(page.getByText(`Welcome back, ${ada.name}`)).toBeVisible();
-    await expect(page.getByText("You don't have any goals yet")).toBeVisible();
+    // Step 1: the name from sign-up is already there; only the language question matters.
+    await expect(page.getByText("Step 1 of 3")).toBeVisible();
+    await expect(page.getByLabel(/What should we call you/)).toHaveValue(ada.name);
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Step 2: study time and what helps.
+    await expect(page).toHaveURL(/step=2$/);
+    await expect(page.getByText("Step 2 of 3")).toBeVisible();
+    const minutes = page.getByLabel(/How many minutes can you study/);
+    await minutes.fill("45");
+    await page.getByLabel("Spaced revision").uncheck();
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Step 3: only a title is needed; the target date is optional and left empty.
+    await expect(page).toHaveURL(/step=3$/);
+    await expect(page.getByLabel(/Target date/)).toBeEmpty();
+    await page.getByLabel("What do you want to learn?").fill(firstGoal);
+    await page.getByRole("button", { name: "Create my first goal" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\?notice=onboarded$/);
+    await expect(page.getByText("You're all set")).toBeVisible();
+    await expect(page.getByRole("link", { name: firstGoal })).toBeVisible();
+    // The study time chosen in step 2 became the goal's own setting.
+    await expect(page.getByText("45 minutes a day")).toBeVisible();
   });
 
-  test("a goal is saved to the account and survives a reload", async ({ page }) => {
+  test("the dashboard shows real counts and survives a reload", async ({ page }) => {
     await signIn(page, ada);
     await expect(page).toHaveURL(/\/dashboard$/);
 
-    await createGoal(page, goalTitle);
+    const glance = page.getByLabel("Your goals at a glance");
+    await expect(glance).toContainText("Active");
+    await expect(glance.getByText("1", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: firstGoal })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("link", { name: firstGoal })).toBeVisible();
+    // Setup is done: the prompt to finish it is gone, and /onboarding no longer redirects.
+    await expect(page.getByText("Finish setting up StudyPilot")).toHaveCount(0);
+  });
+
+  test("preferences are saved, survive a reload and start the next goal", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto("/settings");
+
+    await page.getByLabel("Usual minutes of study per day").fill("75");
+    await page.getByLabel(/Hindi/).check();
+    await page.getByRole("button", { name: "Save preferences" }).click();
+    await expect(page.getByText("Your preferences are saved.")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByLabel("Usual minutes of study per day")).toHaveValue("75");
+    await expect(page.getByLabel(/Hindi/)).toBeChecked();
+
+    await page.goto("/goals/new");
+    await expect(page.getByLabel("Minutes you can study each day")).toHaveValue("75");
+    await expect(page.getByLabel(/Hindi/)).toBeChecked();
+    // Unticked in onboarding, and still unticked: the choice was saved, not reset to a default.
+    await expect(page.getByLabel("Spaced revision")).not.toBeChecked();
+    await expect(page.getByLabel("Worked examples")).toBeChecked();
+  });
+
+  test("a second goal can be created with a target date and shows on the dashboard", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await createGoal(page, secondGoal, { targetDate: "2030-03-01" });
+
     await expect(page.getByText("Goal created")).toBeVisible();
-    await expect(page.getByText(goalTitle)).toBeVisible();
+    await expect(page.getByRole("link", { name: secondGoal })).toBeVisible();
+    await expect(page.getByText("By 1 Mar 2030")).toBeVisible();
+    await expect(page.getByText("75 minutes a day")).toBeVisible();
+  });
+
+  test("a goal can be edited and the edit is still there after a reload", async ({ page }) => {
+    await signIn(page, ada);
+    firstGoalId = await openGoal(page, firstGoal);
+
+    await page.getByRole("link", { name: "Edit" }).click();
+    await page.getByLabel("What do you want to learn?").fill(renamedGoal);
+    await page.getByLabel("Your level today").selectOption("intermediate");
+    await page.getByLabel("Minutes you can study each day").fill("30");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}\\?notice=updated$`));
+    await expect(page.getByText("Changes saved")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: renamedGoal })).toBeVisible();
 
     await page.goto("/dashboard");
-    await expect(page.getByText(goalTitle)).toBeVisible();
     await page.reload();
-    await expect(page.getByText(goalTitle)).toBeVisible();
+    await expect(page.getByRole("link", { name: renamedGoal })).toBeVisible();
+    await expect(page.getByText("Level: Intermediate")).toBeVisible();
+    await expect(page.getByText("30 minutes a day")).toBeVisible();
+  });
+
+  test("invalid edits show the problem next to the field and change nothing", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/edit`);
+
+    await page.getByLabel("Minutes you can study each day").fill("5");
+    await page.getByLabel("Minutes you can study each day").evaluate((input) => {
+      (input as HTMLInputElement).removeAttribute("min"); // get past the browser's own check
+    });
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page.getByText(/at least 10 minutes/)).toBeVisible();
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText("30 minutes")).toBeVisible();
+  });
+
+  test("a goal can be paused, resumed, completed and reopened", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}`);
+
+    await page.getByRole("button", { name: "Pause" }).click();
+    await expect(page.getByText("Goal paused")).toBeVisible();
+    await expect(page.getByText("Paused", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Resume" }).click();
+    await expect(page.getByText("This goal is active again")).toBeVisible();
+
+    await page.getByRole("button", { name: "Mark complete" }).click();
+    await expect(page.getByText("Goal completed")).toBeVisible();
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible();
+
+    await page.goto("/dashboard");
+    await expect(page.getByRole("heading", { name: "Completed" })).toBeVisible();
+    await expect(page.getByRole("link", { name: renamedGoal })).toBeVisible();
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await page.getByRole("button", { name: "Reopen" }).click();
+    await expect(page.getByText("This goal is active again")).toBeVisible();
+  });
+
+  test("archiving asks first, can be cancelled, and the goal can be restored", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}`);
+
+    // Cancel: nothing happens.
+    await page.getByRole("button", { name: "Archive" }).click();
+    const dialog = page.getByRole("dialog", { name: "Archive this goal?" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Active", { exact: true })).toBeVisible();
+
+    // Confirm: the goal leaves the dashboard but is in the archive.
+    await page.getByRole("button", { name: "Archive" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Archive goal" }).click();
+    await expect(page).toHaveURL(/\/dashboard\?notice=archived$/);
+    await expect(page.getByText("Goal archived")).toBeVisible();
+    await expect(page.getByRole("link", { name: renamedGoal })).toHaveCount(0);
+
+    await page.getByRole("link", { name: "View archive" }).click();
+    await expect(page.getByRole("link", { name: renamedGoal })).toBeVisible();
+
+    // Archived goals are read-only until restored.
+    await page.getByRole("link", { name: renamedGoal }).click();
+    await expect(page.getByText(/read-only/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
+    await page.goto(`/goals/${firstGoalId}/edit`);
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}$`)); // sent back, not editable
+
+    await page.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("This goal is active again")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+  });
+
+  test("only an archived goal can be deleted, after a warning, and then it is gone", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByRole("button", { name: "Delete permanently" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Archive" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Archive goal" }).click();
+    await expect(page).toHaveURL(/\/dashboard\?notice=archived$/);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await page.getByRole("button", { name: "Delete permanently" }).click();
+    const dialog = page.getByRole("dialog", { name: "Delete this goal permanently?" });
+    await expect(dialog.getByText(/cannot be undone/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete forever" }).click();
+
+    await expect(page).toHaveURL(/\/goals\/archived\?notice=deleted$/);
+    await expect(page.getByText("Goal deleted permanently")).toBeVisible();
+    await expect(page.getByRole("link", { name: renamedGoal })).toHaveCount(0);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText("We couldn't find that")).toBeVisible();
   });
 
   test("the session lives in HttpOnly cookies, not in script-readable storage", async ({
@@ -111,31 +334,26 @@ test.describe("authentication and goals", () => {
     const secondTab = await page.context().newPage();
     await secondTab.goto("/dashboard");
     await expect(secondTab.getByRole("heading", { name: "Your learning goals" })).toBeVisible();
-    await expect(secondTab.getByText(goalTitle)).toBeVisible();
+    await expect(secondTab.getByRole("link", { name: secondGoal })).toBeVisible();
   });
 
-  test("signing out ends access to protected pages", async ({ page }) => {
+  test("signing out ends access, and signing back in restores everything", async ({ page }) => {
     await signIn(page, ada);
-    await expect(page).toHaveURL(/\/dashboard$/);
-
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/$/);
 
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
-    await page.goto("/goals/new");
-    await expect(page).toHaveURL(/\/sign-in\?next=%2Fgoals%2Fnew$/);
-  });
+    await page.goto("/settings");
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fsettings$/);
 
-  test("signing back in shows the same goals", async ({ page }) => {
     await signIn(page, ada);
-
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByText(goalTitle)).toBeVisible();
+    await expect(page.getByRole("link", { name: secondGoal })).toBeVisible();
   });
 
   test("a wrong password gives one generic message and no session", async ({ page }) => {
-    await signIn(page, ada, "definitely-not-the-password");
+    await attemptSignIn(page, ada, "definitely-not-the-password");
 
     await expect(page.getByText("The email or password is incorrect.")).toBeVisible();
     await expect(page).toHaveURL(/\/sign-in/);
@@ -143,16 +361,70 @@ test.describe("authentication and goals", () => {
     await expect(page).toHaveURL(/\/sign-in\?next=%2Fdashboard$/);
   });
 
-  test("another user sees none of it", async ({ browser }) => {
+  test.describe("another user", () => {
     const grace = newLearner("grace");
-    const { context, page } = await freshContext(browser);
-    try {
-      await signUp(page, grace);
+    let adasGoalId = "";
 
-      await expect(page.getByText("You don't have any goals yet")).toBeVisible();
-      await expect(page.getByText(goalTitle)).toHaveCount(0);
-    } finally {
-      await context.close();
-    }
+    test("sees none of Ada's goals and starts from a clean slate", async ({ browser, page }) => {
+      await signIn(page, ada);
+      adasGoalId = await openGoal(page, secondGoal);
+
+      const other = await freshContext(browser);
+      try {
+        await signUp(other.page, grace);
+        await skipOnboarding(other.page);
+
+        await expect(other.page.getByText("You don't have any goals yet")).toBeVisible();
+        await expect(other.page.getByRole("link", { name: secondGoal })).toHaveCount(0);
+
+        // Ada's goal address looks exactly like an address that doesn't exist.
+        await other.page.goto(`/goals/${adasGoalId}`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+        await other.page.goto(`/goals/${adasGoalId}/edit`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+      } finally {
+        await other.context.close();
+      }
+    });
+
+    test("cannot read, change, move or delete Ada's goal even with a real token", async ({
+      browser,
+      request,
+    }) => {
+      const other = await freshContext(browser);
+      try {
+        // Grace already has an account from the previous test: sign in as her.
+        await signIn(other.page, grace);
+        const token = await accessTokenOf(other.context);
+
+        const goalUrl = `${API_URL}/v1/goals/${adasGoalId}`;
+        const read = await request.get(goalUrl, { headers: bearer(token) });
+        const edit = await request.patch(goalUrl, {
+          headers: bearer(token),
+          data: { title: "Hijacked" },
+        });
+        const move = await request.put(`${goalUrl}/status`, {
+          headers: bearer(token),
+          data: { status: "archived" },
+        });
+        const remove = await request.delete(goalUrl, { headers: bearer(token) });
+        const mine = await request.get(`${API_URL}/v1/goals`, { headers: bearer(token) });
+
+        expect([read.status(), edit.status(), move.status(), remove.status()]).toEqual([
+          404, 404, 404, 404,
+        ]);
+        expect((await mine.json()).items).toEqual([]);
+      } finally {
+        await other.context.close();
+      }
+    });
+
+    test("and Ada's goal is untouched afterwards", async ({ page }) => {
+      await signIn(page, ada);
+
+      await page.goto(`/goals/${adasGoalId}`);
+      await expect(page.getByRole("heading", { level: 1, name: secondGoal })).toBeVisible();
+      await expect(page.getByText("Active", { exact: true })).toBeVisible();
+    });
   });
 });

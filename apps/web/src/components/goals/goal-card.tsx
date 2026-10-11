@@ -1,33 +1,31 @@
 import { CalendarIcon, ClockIcon, LanguagesIcon } from "lucide-react";
+import Link from "next/link";
 
-import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { GoalStatusBadge } from "@/components/goals/goal-status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Goal } from "@/lib/api/server";
+import { formatDate } from "@/lib/format";
+import { goalPath } from "@/lib/goals/ids";
 import { goalLevelLabel, goalTypeLabel, languageLabel } from "@/lib/goals/options";
 
-const STATUS_BADGES: Record<Goal["status"], { label: string; variant: BadgeVariant }> = {
-  active: { label: "Active", variant: "info" },
-  paused: { label: "Paused", variant: "warning" },
-  completed: { label: "Completed", variant: "success" },
-  archived: { label: "Archived", variant: "secondary" },
-};
+export { formatDate };
 
-/** "2026-11-08" -> "8 Nov 2026". Date-only values are formatted in UTC so no timezone shifts them. */
-export function formatDate(isoDate: string): string {
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(
-    new Date(`${isoDate}T00:00:00Z`),
-  );
-}
-
+/** A goal in a list. The title is the link to the goal's page. */
 export function GoalCard({ goal }: { goal: Goal }) {
-  const status = STATUS_BADGES[goal.status];
-
   return (
-    <Card className="h-full">
+    <Card className="relative h-full transition-colors hover:border-primary/40">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-lg">{goal.title}</CardTitle>
-          <Badge variant={status.variant}>{status.label}</Badge>
+          <CardTitle className="text-lg">
+            {/* The link's ::after covers the whole card, so the card is one big tap target. */}
+            <Link
+              href={goalPath(goal.id)}
+              className="rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              {goal.title}
+            </Link>
+          </CardTitle>
+          <GoalStatusBadge status={goal.status} />
         </div>
         <CardDescription>
           {goalTypeLabel(goal.goal_type)} · Level: {goalLevelLabel(goal.current_level)}

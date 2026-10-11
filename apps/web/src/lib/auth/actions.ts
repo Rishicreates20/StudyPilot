@@ -7,7 +7,8 @@ import {
   signInErrorMessage,
   signUpErrorMessage,
 } from "@/lib/auth/messages";
-import { DASHBOARD_PATH, safeRedirectPath } from "@/lib/auth/paths";
+import { safeRedirectPath } from "@/lib/auth/paths";
+import { ONBOARDING_PATH } from "@/lib/onboarding/paths";
 import { signInSchema, signUpSchema, type SignInField, type SignUpField } from "@/lib/auth/schemas";
 import { formString, zodFieldErrors, type FormState } from "@/lib/forms";
 import { createClient } from "@/lib/supabase/server";
@@ -84,7 +85,8 @@ export async function signUpAction(
   }
 
   // With email confirmation off (local development) Supabase returns a session straight away.
-  if (data.session) redirect(DASHBOARD_PATH);
+  // A new account starts with the short setup (which can be skipped), not an empty dashboard.
+  if (data.session) redirect(ONBOARDING_PATH);
 
   // With confirmation on, the answer is the same whether or not the address already had an
   // account, so this screen cannot be used to discover who is registered.

@@ -92,3 +92,26 @@ describe("sessionEndedUrlFor", () => {
     );
   });
 });
+
+describe("the signed-in area", () => {
+  it.each(["/dashboard", "/goals", "/goals/new", "/goals/archived", "/onboarding", "/settings"])(
+    "protects %s",
+    (path) => {
+      expect(isProtectedPath(path)).toBe(true);
+    },
+  );
+
+  it.each(["/goals/11111111-1111-4111-8111-111111111111/edit", "/settings/anything"])(
+    "protects everything beneath it: %s",
+    (path) => {
+      expect(isProtectedPath(path)).toBe(true);
+    },
+  );
+
+  it.each(["/", "/sign-in", "/sign-up", "/status", "/design", "/settingsx", "/goalsx"])(
+    "leaves %s public",
+    (path) => {
+      expect(isProtectedPath(path)).toBe(false);
+    },
+  );
+});

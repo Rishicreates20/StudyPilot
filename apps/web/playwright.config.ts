@@ -21,6 +21,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  // A cold server's first render of a page, or a CI runner's first browser launch, can take a few
+  // seconds. Generous waits cost nothing when things are fast; retries would hide real flakiness.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   forbidOnly: Boolean(process.env.CI),
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: {

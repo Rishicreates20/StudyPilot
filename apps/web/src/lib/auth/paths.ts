@@ -9,7 +9,7 @@ export const SIGN_IN_PATH = "/sign-in";
 export const SIGN_UP_PATH = "/sign-up";
 export const DASHBOARD_PATH = "/dashboard";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/goals"] as const;
+const PROTECTED_PREFIXES = ["/dashboard", "/goals", "/onboarding", "/settings"] as const;
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(

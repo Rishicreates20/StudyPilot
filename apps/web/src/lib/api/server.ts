@@ -14,7 +14,12 @@ import { getServerEnv } from "@/lib/env";
 export type Goal = components["schemas"]["Goal"];
 export type GoalPage = components["schemas"]["GoalPage"];
 export type GoalCreate = components["schemas"]["GoalCreate"];
+export type GoalUpdate = components["schemas"]["GoalUpdate"];
+export type GoalSummary = components["schemas"]["GoalSummary"];
+export type GoalStatus = Goal["status"];
 export type Me = components["schemas"]["Me"];
+export type MeUpdate = components["schemas"]["MeUpdate"];
+export type Preferences = components["schemas"]["Preferences"];
 type ProblemDetail = components["schemas"]["ProblemDetail"];
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -50,8 +55,9 @@ function toApiError(response: Response, body: unknown): ApiError {
   const problem = (typeof body === "object" && body !== null ? body : {}) as Partial<ProblemDetail>;
   const fieldErrors: Record<string, string> = {};
   for (const error of problem.errors ?? []) {
-    // "body.title" -> "title"; keep the first message per field.
-    const field = error.field.replace(/^(body|query|path)\./, "");
+    // "body.title" -> "title", "body.languages.0" -> "languages": a form shows an error on the
+    // list item against its field. Keep the first message per field.
+    const field = error.field.replace(/^(body|query|path)\./, "").split(".")[0] ?? "";
     fieldErrors[field] ??= error.message;
   }
   return new ApiError(
@@ -88,17 +94,76 @@ async function call<T>(
   throw toApiError(result.response, result.error);
 }
 
+/** Like `call`, for endpoints that answer 204 No Content. */
+async function callWithoutBody(
+  run: () => Promise<{ error?: unknown; response: Response }>,
+): Promise<void> {
+  let result: Awaited<ReturnType<typeof run>>;
+  try {
+    result = await run();
+  } catch {
+    throw new ApiError(0, "API_UNREACHABLE", "The service is unreachable right now.");
+  }
+  if (!result.response.ok) throw toApiError(result.response, result.error);
+}
+
 export function fetchMe(accessToken: string): Promise<Me> {
   return call(() => client(accessToken).GET("/v1/me"));
 }
 
+export function updateMe(accessToken: string, body: MeUpdate): Promise<Me> {
+  return call(() => client(accessToken).PATCH("/v1/me", { body }));
+}
+
+export function completeOnboarding(accessToken: string): Promise<Me> {
+  return call(() => client(accessToken).POST("/v1/me/onboarding/complete"));
+}
+
 export function fetchGoals(
   accessToken: string,
-  query: { cursor?: string; limit?: number } = {},
+  query: { status?: GoalStatus[]; cursor?: string; limit?: number } = {},
 ): Promise<GoalPage> {
   return call(() => client(accessToken).GET("/v1/goals", { params: { query } }));
 }
 
+export function fetchGoalSummary(accessToken: string): Promise<GoalSummary> {
+  return call(() => client(accessToken).GET("/v1/goals/summary"));
+}
+
+export function fetchGoal(accessToken: string, goalId: string): Promise<Goal> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}", { params: { path: { goal_id: goalId } } }),
+  );
+}
+
 export function createGoal(accessToken: string, body: GoalCreate): Promise<Goal> {
   return call(() => client(accessToken).POST("/v1/goals", { body }));
+}
+
+export function updateGoal(accessToken: string, goalId: string, body: GoalUpdate): Promise<Goal> {
+  return call(() =>
+    client(accessToken).PATCH("/v1/goals/{goal_id}", {
+      params: { path: { goal_id: goalId } },
+      body,
+    }),
+  );
+}
+
+export function setGoalStatus(
+  accessToken: string,
+  goalId: string,
+  status: GoalStatus,
+): Promise<Goal> {
+  return call(() =>
+    client(accessToken).PUT("/v1/goals/{goal_id}/status", {
+      params: { path: { goal_id: goalId } },
+      body: { status },
+    }),
+  );
+}
+
+export function deleteGoal(accessToken: string, goalId: string): Promise<void> {
+  return callWithoutBody(() =>
+    client(accessToken).DELETE("/v1/goals/{goal_id}", { params: { path: { goal_id: goalId } } }),
+  );
 }
