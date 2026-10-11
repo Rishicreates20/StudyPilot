@@ -42,12 +42,20 @@ cp apps/web/.env.example     apps/web/.env.local      # then fill in NEXT_PUBLIC
 
 ## Run
 
-Two terminals:
+Three terminals:
 
 ```bash
-npm run dev:api     # FastAPI on http://localhost:8000   (interactive docs: /docs)
-npm run dev:web     # Next.js on http://localhost:3000
+npm run dev:api      # FastAPI on http://localhost:8000   (interactive docs: /docs)
+npm run dev:web      # Next.js on http://localhost:3000
+npm run dev:worker   # runs queued background jobs: roadmap generation
 ```
+
+The worker is a separate process that reads the same `services/api/.env`. Roadmap generation needs
+it, plus `LLM_PROVIDER` and (for `gemini`) `GEMINI_API_KEY` in that file: without a provider the
+"Generate roadmap" button answers that AI isn't set up and queues nothing; without a worker a
+queued job simply waits (the page says so after 45 seconds). To try the whole flow with no AI key,
+set `LLM_PROVIDER=fake`: it produces a small plan clearly labelled "Sample plan". Restart the API
+and the worker after changing either variable.
 
 `dev:api` passes `--loop asyncio:SelectorEventLoop`. The database driver (psycopg) cannot use the
 Windows default event loop; on Linux and macOS the flag changes nothing.
@@ -58,6 +66,7 @@ Windows default event loop; on Linux and macOS the flag changes nothing.
 | <http://localhost:3000/sign-up> · `/sign-in` | Create an account · sign in |
 | <http://localhost:3000/dashboard> | Your goals (redirects to sign-in when signed out) |
 | <http://localhost:3000/goals/new> | Create a goal |
+| <http://localhost:3000/goals/ID/roadmap> | A goal's roadmap: modules, topics, schedule, versions |
 | <http://localhost:3000/status> | Live health of the web app and the API (the API must be running) |
 | <http://localhost:3000/design> | The design system preview (sample content) |
 | <http://localhost:3000/api/health> | Web liveness probe (JSON) |
@@ -119,9 +128,12 @@ uv run --directory services/api python -m pytest tests/supabase_stack -v
 ### Browser tests (Playwright)
 
 `apps/web/e2e` drives a real browser through sign-up, the three onboarding steps, creating, editing,
-pausing, completing, archiving, restoring and deleting goals, saving settings, reloads, sign-out,
-sign-in, and a second user who must get "not found" for the first user's goal (in the pages and
-straight from the API). It needs the same stack, a production build made with the stack's
+generating a roadmap (the real API and the real worker, with the built-in `fake` provider so no AI
+key or network call is involved), checking its schedule against the daily minutes, revising it into
+version 2 and switching back to version 1, pausing, completing, archiving, restoring and deleting
+goals, saving settings, reloads, sign-out, sign-in, and a second user who must get "not found" for
+the first user's goal and roadmap (in the pages and straight from the API). Playwright starts the
+API, the worker and the web app itself. The config **refuses to run** unless `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_URL` and `DATABASE_URL` are set in the environment and point at this machine (127.0.0.1 or localhost): the tests create accounts, goals and jobs, and the API and worker would otherwise fall back to `services/api/.env`, which usually holds a real project. `.github/scripts/supabase_stack_env.py` prints the right values for `npx supabase start`. It needs the same stack, a production build made with the stack's
 `NEXT_PUBLIC_*` values, and a browser: see the header of `apps/web/playwright.config.ts`, then
 
 ```bash

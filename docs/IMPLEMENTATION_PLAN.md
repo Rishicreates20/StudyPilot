@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Status** | Living plan — Milestone 1 and the product part of Milestone 2 are implemented; no AI feature exists yet |
-| **Date** | Written 2026-10-09 · last updated 2026-10-11 |
+| **Status** | Living plan — Milestone 1, the product part of Milestone 2 and the roadmap-generation part of Milestone 3 are implemented |
+| **Date** | Written 2026-10-09 · last updated 2026-10-11 (roadmap generation) |
 | **Related** | [PRD.md](PRD.md) · [ARCHITECTURE.md](ARCHITECTURE.md) |
 
-**Done:** M1 (foundation, Supabase auth and database, protected goals API, sign-up/sign-in/dashboard) and the product half of M2 (onboarding, goal management, settings; §4.5).
-**Next action:** the *deployment* half of M2 (Vercel, Render, a staging Supabase project; needs accounts from the owner), then **Milestone 3 — job queue and AI foundation** (§5). Do not start AI generation before that.
+**Done:** M1 (foundation, Supabase auth and database, protected goals API, sign-up/sign-in/dashboard), the product half of M2 (onboarding, goal management, settings; §4.5) and the roadmap slice of M3 (job queue, worker, `LLMProvider` + Gemini, planner, versioned roadmaps and UI; §4.6).
+**Next action:** configure the AI key and verify one live Gemini call (§4.6 status notes), then — only when asked — **Milestone 4, lessons** (§5). Still open: the *deployment* half of M2 (Vercel, Render, a staging Supabase project; needs the owner's accounts) and the rest of M3 (OpenAI adapter, cost budgets).
 
 ---
 
@@ -58,7 +58,7 @@ Everything application-level: monorepo, API, web app, migrations, CI, containers
 |---|---|---|---|---|
 | **M1** | Foundation + Goals slice | Monorepo, health endpoints, CI, migrations + RLS tests, Supabase Auth, goal create/list/view, dashboard | Supabase dev project | — |
 | **M2** | Goal management, onboarding, first deploy | Edit/pause/complete/archive, profile settings, onboarding wizard, responsive app shell ✅ · **walking-skeleton deployment** ⬜ | Vercel, Render, Supabase staging | — |
-| **M3** | Job queue, AI foundation, roadmaps | Durable queue + worker, `LLMProvider`, intent parser + planner, programmatic plan validation, budgets + usage ledger, job-progress UI, roadmap overview | LLM API key; confirm provider (A4) | — |
+| **M3** | Job queue, AI foundation, roadmaps | Durable queue + worker ✅, `LLMProvider` + Gemini ✅, planner ✅ (intent parsing is folded into the planner's input), programmatic plan validation ✅, usage ledger ✅ and a daily count limit ✅ (cost budgets ⬜), job-progress UI ✅, roadmap overview ✅ · OpenAI adapter ⬜ | LLM API key (provider confirmed: Gemini) | — |
 | **M4** | Lessons and study workspace | Structured lessons per item, workspace UI, simple-explanation toggle, progress, resume | — | — |
 | **M5** | Quizzes, mastery, next action | Question generation, server-side grading, answer-key isolation, mastery, weak-topic flags, next-action | — | **Private alpha** |
 | **M6** | Documents, RAG, citations | Private upload, extraction + OCR, chunk/embed/index, hybrid retrieval, validated citations | — | **Beta-capable** (with M9) |
@@ -143,7 +143,7 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 | 8 | Missing or invalid environment variables stop the API at startup without echoing secrets | Settings tests | ✅ |
 | 9 | `/healthz` and `/readyz` behave correctly (readiness fails when the database is unreachable) | Health and failure tests | ✅ |
 | 10 | The generated API client is in sync with the OpenAPI document (CI-enforced) | Deterministic regeneration observed locally; CI step passed | ✅ locally · ✅ CI (no drift test: no ORM models) |
-| 11 | Lint, type-check, unit, integration and E2E suites pass **in CI**, outputs read | CI run 38053557495 | ✅ for commit 301c86e · re-check after the M2 push (§4.5) |
+| 11 | Lint, type-check, unit, integration and E2E suites pass **in CI**, outputs read | CI run 38053557495 | ✅ for commit 301c86e; and for 063fc69 (the M2 slice), CI run 38109598536: all five jobs passed |
 | 12 | A new contributor can follow the README to a running app | `docs/SUPABASE_SETUP.md` written from Supabase's current docs | ⏳ not yet followed by someone fresh |
 
 ### 4.5 Milestone 2, product half — onboarding, goal management, settings
@@ -157,9 +157,34 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 - [x] **Accessibility and responsive pass:** axe-core (WCAG 2.0/2.1/2.2 A and AA plus best-practice rules) over sign-up, the three onboarding steps, dashboard, goal page, archive dialog, edit, new, settings and archived pages, light and dark, 1280 px and 375 px wide: **0 violations**. Phone layout checked for horizontal overflow.
 - [ ] **Deployment half of M2** (Vercel, Render, a staging Supabase project, migration-deploy job): **not started**; it needs accounts only the owner can create (§6).
 
-*Status notes (what is and is not verified):* Everything above marked with test counts ran on the primary machine against a real PostgreSQL 16. The **Playwright journey ran locally against a stand-in for Supabase Auth** (a small GoTrue-compatible server used only on this machine, not committed) because Docker is unavailable; it exercises the real web app, the real API and the real migrations, but not Supabase's own Auth service or roles. The same journey, the extended `tests/supabase_stack` module and the new migration under Supabase's real roles run only in the CI `supabase-stack` job: they stay ⏳ until that job's output for the M2 commit has been read. When the migration is applied to a hosted project (`npx supabase db push`), no new environment variable is needed.
+*Status notes (what is and is not verified):* Everything above marked with test counts ran on the primary machine against a real PostgreSQL 16. The **Playwright journey ran locally against a stand-in for Supabase Auth** (a small GoTrue-compatible server used only on this machine, not committed) because Docker is unavailable; it exercises the real web app, the real API and the real migrations, but not Supabase's own Auth service or roles. The same journey, the extended `tests/supabase_stack` module and the migration under Supabase's real roles ran in the CI `supabase-stack` job for the M2 commit (063fc69, run 38109598536): **all five jobs passed** ✅. When the migration is applied to a hosted project (`npx supabase db push`), no new environment variable is needed.
 
 *Deliberate choices:* the `general` goal type from M1 is kept beside the five listed in the brief (a learner who "just wants to get better at something" is not forced into a wrong category); preferences live on `profiles`, not in a new table (ADR-025); the browser never redirects from a prefetched, data-dependent page (ADR-026).
+
+### 4.6 Milestone 3 — job queue, AI foundation and roadmap generation
+
+**Outcome:** from a goal, the learner asks for a roadmap; a background job produces a structured plan, the server validates it against their real constraints, and it is stored as a versioned roadmap that survives refreshes and can be revised without losing earlier versions. No lesson, quiz or document feature is involved.
+
+- [x] **Migration `20261011100000_jobs_and_roadmaps.sql`:** `generation_jobs` (queue, lease, idempotency, one active job per goal, learner cancel), `ai_usage_events`, `roadmaps`, `roadmap_modules`, `roadmap_items`, `roadmap_item_prerequisites`, with row security, explicit grants, composite ownership keys and the version/exactly-once rules in the database (ADR-029).
+- [x] **AI layer (`app/ai`):** `LLMProvider` with typed errors that say whether to retry; `GeminiProvider` over REST (ADR-027); `FakeProvider` (labelled sample, refused in staging/production); the planner prompt `roadmap-planner/v1` (learner text fenced as data); the Pydantic roadmap schema; programmatic validation of daily minutes, horizon, prerequisites and order, objective coverage, revision timing, language, keys, evidence and "unknowns for exam goals" (ADR-030); one bounded repair then `PLAN_INVALID`.
+- [x] **Worker (`app/jobs`, `python -m app.worker`):** `SKIP LOCKED` claim, heartbeat lease, crash recovery, retries with exponential backoff and jitter, checkpoint of the validated plan, and one transaction that stores the roadmap and finishes the job (ADR-028). The privileged database session exists only here (guard test).
+- [x] **API:** start (202, `Idempotency-Key`, daily allowance, readiness checks), versions, jobs, read a roadmap, make a version current, cancel and retry a job. 401 and 404 on every endpoint for the wrong caller.
+- [x] **Web:** the goal page's roadmap section (empty, live progress, failure with retry, ready), the roadmap page (overview, assumptions and "check these yourself", objectives, modules and topics, revision, optional extras, day-by-day schedule, version history), revise/regenerate dialog, make-current, read-only for archived goals.
+- [x] **Tests (run locally, output observed):** 860 API tests passed, 1 skipped (the genuine-stack module); 642 web tests passed; the 21-test Playwright journey passed (real API, real worker, real migrations, built-in test provider, stand-in for Supabase Auth). Highlights: structured-output validation; invalid, vague and time-starved goals; the daily budget at every size; persistence; retries and backoff; a crashed worker; version uniqueness; the same job claimed twice storing one roadmap; ownership for every route.
+- [ ] **Not built:** OpenAI adapter; cost budgets in currency (a per-learner daily *count* exists); `LISTEN/NOTIFY`; uploaded-document evidence (the schema carries it but it is always empty until M6); a job history page.
+
+*Status notes (what is and is not verified):*
+
+| Claim | Status |
+|---|---|
+| The whole flow (create goal → generate → validated plan stored → shown → survives reload → revise → switch versions → archived read-only → another user gets 404) | ✅ observed locally in a real browser against the real API, worker and database, with the **built-in test provider** and a **stand-in for Supabase Auth** |
+| Database rules, queue concurrency, recovery, retries, versions, ownership | ✅ observed locally against PostgreSQL 16 |
+| The jobs and roadmaps migration and the new database, queue and API behaviour under Supabase's own roles | ✅ CI run 38115233920 (commit 287ba01): all five jobs passed, including `supabase-stack` with the four new roadmap tests |
+| The browser journey (generate, revise, switch, archive) against genuine Supabase Auth | ⏳ the CI run for the web commit that follows (locally the journey ran against the stand-in; the stack tests were also smoke-run against it: 24 of 25 passed, the one failure being a genuine-Auth sign-out test the stand-in cannot imitate) |
+| **A live Gemini call** | ⏳ **not done**: the adapter follows Google's published REST reference (read 2026-10-11) and is tested against a mock transport only. Run `uv run --directory services/api python -m scripts.llm_smoke` after setting `GEMINI_API_KEY`; if Google rejects the request shape or model name, the report names the error code. The default model `gemini-3.8-flash` comes from Google's model list and may need changing. |
+| Quality of real plans (topic choice, pacing, language) | ⏳ unknown until a real model has been run and a person has read the results |
+
+*Deliberate choices:* the AI is called only by the worker, never inside a web request; the new version becomes current at once (history one click away) instead of waiting for approval; a learner's revision note is data inside the fence, not an instruction; revision sessions use the prerequisites table (they "need" the topics they revisit); optional enrichment has no day.
 
 ## 5. Later milestones in outline
 
@@ -167,7 +192,7 @@ Each gets its own detailed breakdown, written at the end of the previous milesto
 
 **M2 — remaining: first deploy.** Theme and Indic-font verification on real devices · **deploy the skeleton** to Vercel + Render + a staging Supabase project · CI migration-deploy job (staging automatic, production manual) · confirm pooler mode and IPv4/IPv6 behaviour on Render. *(Goal management, profile settings, the onboarding wizard and the responsive shell are done: §4.5.)*
 
-**M3 — Job queue, AI foundation, roadmap generation.** Migrations + pgTAP for `generation_jobs`, `ai_usage_events`, `roadmaps`, `roadmap_items`, `roadmap_item_prerequisites` · queue claim/lease/heartbeat/retry/cancel · worker process and compose service · `LLMProvider`, first real adapter, `FakeProvider` for tests · versioned prompts for intent parser and planner · **programmatic** plan validators (time budget, acyclic ordered prerequisites, objective coverage, unique sequence) with one bounded repair attempt · budgets and usage ledger · `Idempotency-Key` · job status API and progress UI · roadmap overview with learner edits · evaluation fixtures (malformed output, infeasible plans) · worker-kill and duplicate-submission tests. *Verify current provider SDK APIs and model names first.*
+**M3 — Job queue, AI foundation, roadmap generation.** *(Roadmap slice done: §4.6. Left over: OpenAI adapter, cost budgets, uploaded-document evidence from M6.)* Migrations + pgTAP for `generation_jobs`, `ai_usage_events`, `roadmaps`, `roadmap_items`, `roadmap_item_prerequisites` · queue claim/lease/heartbeat/retry/cancel · worker process and compose service · `LLMProvider`, first real adapter, `FakeProvider` for tests · versioned prompts for intent parser and planner · **programmatic** plan validators (time budget, acyclic ordered prerequisites, objective coverage, unique sequence) with one bounded repair attempt · budgets and usage ledger · `Idempotency-Key` · job status API and progress UI · roadmap overview with learner edits · evaluation fixtures (malformed output, infeasible plans) · worker-kill and duplicate-submission tests. *Verify current provider SDK APIs and model names first.*
 
 **M4 — Lessons and study workspace.** `learning_materials` · lesson schema and validator · per-item lesson job (on demand, with prefetch of the next item) · lesson renderer for structured JSON (headings, code, callouts, glossary) · simple-explanation toggle from stored content · item progress and resume position · mobile-first workspace · general-knowledge labelling when no sources exist.
 

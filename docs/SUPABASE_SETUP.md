@@ -67,9 +67,9 @@ npx supabase db push --dry-run   # lists what would be applied
 npx supabase db push
 ```
 
-`link` asks for the database password. The three migrations create `profiles` (one row per user, filled automatically by a trigger when a user signs up) and `learning_goals`, each with Row Level Security and explicit grants, and then add the goal lifecycle (legal status changes, archived goals read-only, delete only after archiving) and the learner's saved preferences. Check the result with `npx supabase migration list --linked`.
+`link` asks for the database password. The four migrations create `profiles` (one row per user, filled automatically by a trigger when a user signs up) and `learning_goals`, each with Row Level Security and explicit grants, and then add the goal lifecycle (legal status changes, archived goals read-only, delete only after archiving), the learner's saved preferences, and — in `20261011100000_jobs_and_roadmaps.sql` — the background job queue, the AI usage ledger and versioned roadmaps. Check the result with `npx supabase migration list --linked`.
 
-**Updating an existing project:** if you applied the first two migrations earlier, run `npx supabase db push` again; only the new `20261010100000_goal_lifecycle_and_preferences` file is applied. No new environment variable or dashboard setting is needed. Existing accounts that already have goals are marked as having finished onboarding; everyone else is offered it on their next visit.
+**Updating an existing project:** run `npx supabase db push` again; only migrations you have not applied yet are run (the roadmap work adds `20261011100000_jobs_and_roadmaps`). Nothing needs changing in the Supabase dashboard. The only new settings are the optional AI variables in §4, which live in the API's `.env`, not in Supabase. Existing accounts that already have goals are marked as having finished onboarding; everyone else is offered it on their next visit.
 
 ### Step 5. Choose the token verification mode
 
@@ -176,6 +176,16 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `JWT_LEEWAY_SECONDS` | No | No | `10` | Clock-skew tolerance, 0–60 |
 | `DB_POOL_MIN_SIZE` / `DB_POOL_MAX_SIZE` / `DB_POOL_TIMEOUT_SECONDS` | No | No | `1` / `10` / `5` | Connection pool |
 | `MAX_ACTIVE_GOALS_PER_USER` | No | No | `50` | Per-user cap; the 51st goal gets a 409 |
+| `LLM_PROVIDER` | For roadmaps | No | empty (AI off) | `gemini` or `fake`. Empty: "Generate roadmap" answers that AI isn't set up and queues nothing. `fake` is a labelled stand-in for local development and tests; the API refuses to start with it in staging or production. |
+| `GEMINI_API_KEY` | `gemini` only | **Yes** | — | From Google AI Studio. Server-only: sent to Google in a request header, never logged, never returned. Set it in `services/api/.env` yourself; never paste it into chat or a tracked file. |
+| `GEMINI_MODEL` | No | No | `gemini-3.8-flash` | Planning model. Check Google's current model list before changing it. |
+| `GEMINI_BASE_URL` | No | No | `https://generativelanguage.googleapis.com/v1beta` | Only for tests and proxies |
+| `LLM_TIMEOUT_SECONDS` / `LLM_MAX_OUTPUT_TOKENS` / `LLM_TEMPERATURE` | No | No | `120` / `24000` / `0.4` | Per-call limits |
+| `JOB_MAX_ATTEMPTS` | No | No | `3` | Tries per job; only transient failures are retried |
+| `JOB_LEASE_SECONDS` | No | No | `90` | How long a claimed job stays locked without a heartbeat (5–900) |
+| `JOB_RETRY_BASE_SECONDS` | No | No | `5` | First retry delay; later ones double, with jitter, up to 5 minutes |
+| `WORKER_POLL_SECONDS` / `WORKER_CONCURRENCY` | No | No | `2` / `1` | How the worker process polls the queue |
+| `ROADMAP_JOBS_PER_USER_PER_DAY` | No | No | `20` | Roadmap generations one learner may start per rolling 24 hours |
 | `CORS_ALLOWED_ORIGINS` | No | No | `http://localhost:3000` | Web origins allowed to call the API from a browser |
 | `LOG_LEVEL`, `APP_NAME`, `APP_VERSION` | No | No | `INFO`, `StudyPilot`, `0.1.0` | Logging and reporting |
 
@@ -200,8 +210,8 @@ If Supabase is not configured in development, the sign-in and sign-up pages show
 | Row Level Security, grants, constraints, deleted accounts | Database tests against the same PostgreSQL | Yes, locally |
 | Sign-in / sign-up / sign-out actions never echo passwords, never leak provider errors, refuse open redirects; the proxy refreshes the session and writes HttpOnly cookies; the API client sends only the bearer token | Web unit tests with the Supabase client mocked | Yes, locally |
 | Goal lifecycle: every legal and illegal status change, archived goals read-only, `completed_at` / `archived_at` set only by the database, delete only when archived, preferences and onboarding saved per user | Database tests and API tests against the same PostgreSQL (real migrations) | Yes, locally |
-| **Genuine Supabase Auth tokens verify; the profile trigger fires on a real `auth.users` insert; RLS holds under Supabase's own roles; PostgREST cannot read the tables; sign-out ends the session** | `services/api/tests/supabase_stack` against `supabase start` | **Only in CI** (needs Docker). Observed green for the first two migrations (run 38053557495); the lifecycle and preferences tests added since have not run on a genuine stack yet |
-| **Real browser flow** (sign up, onboarding, goals, edit, lifecycle, settings, reload, sign out, sign in, second user sees nothing) | Playwright (`apps/web/e2e`) against the same stack | **Only in CI.** The shorter M1 version is observed green; the current version ran locally against a stand-in for Supabase Auth, not against Supabase |
+| **Genuine Supabase Auth tokens verify; the profile trigger fires on a real `auth.users` insert; RLS holds under Supabase's own roles; PostgREST cannot read the tables; sign-out ends the session** | `services/api/tests/supabase_stack` against `supabase start` | **Only in CI** (needs Docker). Observed green through the goal lifecycle and preferences (CI run 38109598536) and, for the jobs and roadmaps migration and its tests under Supabase's real roles, in CI run 38115233920 (commit 287ba01) |
+| **Real browser flow** (sign up, onboarding, goals, edit, lifecycle, settings, reload, sign out, sign in, second user sees nothing) | Playwright (`apps/web/e2e`) against the same stack | **Only in CI.** Observed green through the onboarding and goals journey (CI run 38109598536). The roadmap steps ran locally against a stand-in for Supabase Auth, not against Supabase |
 
 The rows marked "only in CI" are the ones this machine cannot run against Supabase itself. Do not treat the newest parts as proven on Supabase until the `supabase-stack` job is green for the commit that introduced them.
 
@@ -213,7 +223,10 @@ The rows marked "only in CI" are the ones this machine cannot run against Supaba
 | API exits with `DATABASE_URL must set sslmode=require` | `APP_ENV` is `staging`/`production` | Append `?sslmode=require` |
 | `/readyz` reports the database as failing | Wrong password or host; IPv6-only direct connection from an IPv4 network | Use the **session pooler** string; check the password; percent-encode symbols |
 | Every request to the API is 401 `INVALID_TOKEN` although you are signed in | Mode mismatch: `jwks` mode with a project that signs with the legacy secret, or the reverse | Step 5. The API log has a `reason` category (never the token). |
-| You sign in successfully but keep landing on sign-in with "Your session has ended" | The API rejects tokens Supabase issues: signing mode mismatch (`jwks` vs `hs256`), a different `SUPABASE_URL` in the API than in the web app, or (for a deleted account) the account no longer exists | Compare `SUPABASE_URL` in both apps and re-check Step 5. The API log line `auth.rejected` carries a `reason` category, never the token. |
+| You sign in successfully but keep landing on sign-in with "Your session has ended" | The API rejects tokens Supabase issues: signing mode mismatch (`jwks` vs `hs256`), a different `SUPABASE_URL` in the API than in the web app, or (for a deleted account) the account no longer exists | Compare `SUPABASE_URL` in both apps and re-check Step 5. The API log line `auth.rejected` carries a `reason` category, never the token: `reason=unexpected_algorithm` means the project signs with the other kind of key (for example the project issues ES256 tokens but `SUPABASE_JWT_MODE=hs256` is set): open `https://<ref>.supabase.co/auth/v1/.well-known/jwks.json`; if it lists a key, use `jwks` mode (no secret needed). |
+| "Generate roadmap" says AI isn't set up (503 `AI_NOT_CONFIGURED`) | `LLM_PROVIDER` is empty, or `gemini` without `GEMINI_API_KEY` | Set them in `services/api/.env` and restart the API **and** the worker |
+| A roadmap job stays "Waiting for a free worker…" | The worker process isn't running | `npm run dev:worker` (the page says so after 45 s). Queued jobs are kept and start as soon as a worker runs. |
+| The roadmap job fails with `AI_AUTH_FAILED` | The provider rejected the API key | Check `GEMINI_API_KEY`, restart the worker |
 | 503 `AUTH_UNAVAILABLE` | The API could not fetch the JWKS and has no cached keys | Check `SUPABASE_URL` and network egress |
 | 401 `ACCOUNT_NOT_FOUND` after sign-in | The user was deleted in Supabase (the token is still valid until it expires) | Sign in again with a different account; deleting a user also deletes their goals |
 | "Sign-in isn't set up yet" card in the web app | `NEXT_PUBLIC_SUPABASE_*` unset | Step 6, then restart the dev server (these are read at start/build time) |

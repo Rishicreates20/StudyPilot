@@ -168,7 +168,7 @@ Recorded rather than asked, per the working agreement. Each can be overridden; n
 | **A1** | Launch segment is Persona A (professional upskiller). |
 | **A2** | UI is English at launch. Lesson language follows the goal's first preferred language; Hindi/Odia content quality is a P2 improvement. |
 | **A3** | Auth is Supabase email + password, with email confirmation enabled outside local development. Social login is a later addition. |
-| **A4** | The first real LLM adapter is **Gemini** (generous free tier for an MVP, strong multilingual and vision support). OpenAI is the second adapter. Provider choice is configuration, not architecture. **To confirm before M3.** |
+| **A4** | The first real LLM adapter is **Gemini** (generous free tier for an MVP, strong multilingual and vision support). OpenAI is the second adapter. Provider choice is configuration, not architecture. **Confirmed by the account owner on 2026-10-11**; the adapter is built, a live call awaits their API key. |
 | **A5** | Embeddings use a fixed 1536-dimension vector, matching the source schema. The exact model is chosen with the provider and recorded per chunk. |
 | **A6** | Hosting: Vercel (web), Render (API + worker, Docker), Supabase managed (Auth, Postgres, Storage). |
 | **A7** | Learner edits to a roadmap apply in place to the published version; regeneration creates a new version. |
@@ -183,6 +183,9 @@ Recorded rather than asked, per the working agreement. Each can be overridden; n
 | **A16** | Content languages at launch are English, Hindi and Odia (the same set the fonts cover). A goal carries one to five of them. Adding a language is a code change, not a database change. |
 | **A17** | A goal type outside the brief's five (academic subject, examination, certification, professional skill, interview preparation) is allowed as "general", so a learner is never forced into a wrong category. |
 | **A18** | Archiving is the everyday way to remove a goal; permanent deletion is a second, confirmed step available only for archived goals. A learner can hold at most 50 not-yet-archived goals (configurable). |
+| **A19** | Roadmap generation is on demand and asynchronous: the learner starts it, can leave the page, and finds the result later. It normally takes well under a minute with a real model. A learner may start up to 20 generations a day (configurable) and has at most one running per goal. |
+| **A20** | Regenerating or revising a roadmap adds a **new version** and makes it current; every earlier version is kept and can be made current again. A revision note (up to 500 characters) is treated as the learner's words about the plan's content, never as instructions to the system. |
+| **A21** | A plan is only ever described as built from the learner's own material when they uploaded some (not yet possible). Otherwise it says it is not an official syllabus and lists what the learner should verify (exam pattern, dates, official topics). |
 
 ### Open questions (none block M1)
 

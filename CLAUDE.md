@@ -4,14 +4,14 @@ Durable instructions for AI-assisted work in this repository. Keep this file sho
 
 ## Status
 
-**Implemented:** Milestone 1 (foundation, Supabase database and auth, protected goals API, sign-up / sign-in / dashboard) and the product half of Milestone 2 (onboarding wizard, goal edit / pause / complete / archive / restore / delete, settings and persistent preferences). There are no AI features yet. The next tasks are the *deployment* half of M2 and then **Milestone 3** (job queue, AI foundation) in `docs/IMPLEMENTATION_PLAN.md`. Do not build later milestones early.
+**Implemented:** Milestone 1 (foundation, Supabase database and auth, protected goals API, sign-up / sign-in / dashboard), the product half of Milestone 2 (onboarding wizard, goal management, settings and preferences) and the first AI feature: **roadmap generation** (PostgreSQL job queue, background worker, `LLMProvider` with a Gemini adapter, versioned planner prompt, code-validated plans, versioned roadmaps, overview UI). Not built yet: lessons, quizzes, documents/RAG, flashcards, exports, deployment. Do **not** start lesson generation (M4) until asked; the *deployment* half of M2 still needs the owner's accounts. Do not build later milestones early.
 
-What is *not* yet observed: anything that needs a genuine Supabase stack for the **newest** code (the goal-lifecycle migration under Supabase's own roles, the extended `tests/supabase_stack` module, the current Playwright journey). Only the CI `supabase-stack` job can run it; the journey was run locally against a throwaway stand-in for Supabase Auth, which proves the app but not Supabase. Do not describe those as verified until a CI run for that commit has been read. (CI run 38053557495, commit 301c86e, was green for everything up to Milestone 1.)
+What is *not* yet observed: a **live Gemini call** (the adapter was written from Google's docs and tested against a mock transport; the first real call needs the owner's `GEMINI_API_KEY`), and anything that needs a genuine Supabase stack for the **newest** code (the roadmap migration under Supabase's own roles, the extended `tests/supabase_stack` module, the current Playwright journey). Only the CI `supabase-stack` job can run it; the journey was run locally against a throwaway stand-in for Supabase Auth, which proves the app but not Supabase. Do not describe those as verified until a CI run for that commit has been read. (CI run 38109598536, commit 063fc69, was green on all five jobs for everything up to the onboarding and goal-management slice.)
 
 ## Read first
 
-- `docs/PRD.md` — what and why; assumptions A1–A18
-- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…026); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
+- `docs/PRD.md` — what and why; assumptions A1–A21
+- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…030); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
 - `docs/IMPLEMENTATION_PLAN.md` — milestone order, acceptance criteria (with honest status), risks
 - `docs/SUPABASE_SETUP.md` — how a Supabase project is configured and which environment variables exist
 
@@ -23,9 +23,11 @@ What is *not* yet observed: anything that needs a genuine Supabase stack for the
 - **Identity comes only from the verified token** (`get_principal`). Never read a user ID from a body, query string, header or form field; request bodies use `extra="forbid"` so a field naming an owner is a 422. Test every new endpoint for: no token, bad token, another user's resource (404).
 - Every user-data table has `user_id`; child tables use composite FKs `(parent_id, user_id)`.
 - Answer keys and explanations live in `question_answer_keys` and are never returned before submission.
-- `system_session()` (worker and grading-key reads only) does not exist yet; when it does it must not be imported by routers.
+- `Database.system_session()` (privileged: bypasses RLS) exists for the worker only (`app/jobs`, `app/worker.py`). A test (`tests/test_architecture_rules.py`) fails the build if `api`, `services`, `repositories` or `schemas` mention it. Functions that take a `SystemConnection` filter by `user_id` explicitly.
 - Non-owned or missing resource → **404**. Errors are RFC 9457 problem+json; never leak stack traces, prompts, tokens or secrets. Never log tokens, emails, passwords or user-authored text.
 - The Supabase **service-role / secret key is not used anywhere** and must not be added without a recorded decision. Only the publishable key is public.
+- Roadmaps are **immutable versions** (ADR-029): never edit a stored plan; a regeneration or revision adds the next version, and clients can only switch which one is `current`. The worker is the only writer of `roadmaps*`, `generation_jobs` state and `ai_usage_events`. One queued/running job per goal is enforced by a unique index. Never log goal text, revision notes, prompts or model output (identifiers and codes only); job errors shown to learners come from fixed `user_message`s, never from provider text.
+- Prompts are versioned (`roadmap-planner/v1`): changing the wording means a new version string, not an in-place edit once roadmaps exist. Learner text goes inside the escaped `<learner_data>` fence. `LLM_PROVIDER=fake` is for local runs and tests; its plans say they are samples and the API refuses it in staging/production.
 - All AI calls go through `LLMProvider`. Structured outputs are always re-validated with Pydantic. Plan feasibility, citations and answer keys are validated **by code**, not by asking the model. Models have no tools. Uploaded content is data, never instructions.
 - One job queue: PostgreSQL (`SKIP LOCKED`, leases). No Redis. Jobs checkpoint per stage and are idempotent.
 - Never fabricate AI-generated learning content, video URLs, timestamps or citation IDs to make the product look complete. `FakeProvider` is for tests only and is refused in staging/production.
@@ -41,7 +43,7 @@ What is *not* yet observed: anything that needs a genuine Supabase stack for the
 | Command | Does |
 |---|---|
 | `npm install` · `uv sync --directory services/api` · `uv sync --directory services/api/tests/pg_server` | Install web deps / API deps / the API tests' throwaway PostgreSQL |
-| `npm run dev:web` · `npm run dev:api` | Start Next.js (:3000) / FastAPI (:8000, needs `services/api/.env`) |
+| `npm run dev:web` · `npm run dev:api` · `npm run dev:worker` | Start Next.js (:3000) / FastAPI (:8000, needs `services/api/.env`) / the background worker (roadmap jobs; needs `LLM_PROVIDER` in the same `.env`) |
 | `npm run check` | Format check + lint + type-check + tests for **both** apps |
 | `npm run format` | Write formatting (Prettier + `ruff format`) |
 | `npm run lint` · `typecheck` · `test` (each also `:web` / `:api`) | Individual checks |
@@ -59,6 +61,7 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - **Redirects:** run every `next`/return-to value through `safeRedirectPath`. When the API rejects a session Supabase still holds, redirect with `sessionEndedUrlFor` (the sign-in page shows its form for that marker); a plain `signInUrlFor` there would loop.
 - **No data-dependent redirects on prefetchable pages (ADR-026).** Next's client router caches a redirect seen during `<Link>` prefetch and replays it later, overriding a Server Action's redirect. Pages like the dashboard and onboarding show a prompt instead; only mutations redirect. Anything that builds the Supabase client runs `await connection()` first (`lib/supabase/server.ts` does).
 - **Goals:** the lifecycle (legal status moves, archived = read-only, delete only when archived) is enforced by the API *and* the database (ADR-025); change both together and keep `tests/db/test_db_goal_lifecycle.py` and `tests/api/test_api_goal_management.py` in step. Notices after a mutation use `?notice=` through the lookup table in `lib/goals/notices.ts`, never free text from the URL.
+- **Live job progress:** the goal page's status card re-renders the page from the server with `router.refresh()` every 2 s while a job is active (no token or polling endpoint in the browser). Page-level redirects remain forbidden on prefetchable pages: the roadmap page shows an empty state instead of redirecting when there is no roadmap.
 - **Forms:** native forms → Server Actions → Zod → API; map the API's field errors back onto inputs; never echo a password in returned state; use one generic message for failed sign-in (no account enumeration).
 - Environment access goes through `src/lib/env.ts` (Zod, fail-fast); read `NEXT_PUBLIC_*` only via literal `process.env.NAME` there.
 - Use design tokens and the components in `src/components` (see `docs/DESIGN_SYSTEM.md`); never hard-code colours. Server-only tests need `// @vitest-environment node`.
@@ -71,6 +74,7 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - **Smart App Control is on and its verdicts change.** Unsigned native code can be blocked, including things that ran the day before (2026-10-10: the venv launcher and `ruff.exe`). Test any new native dependency early. Never suggest disabling the setting.
 - Long paths are disabled: work from a short path, not from deeply nested app-data folders. The current checkout lives under OneDrive, which makes installs slow (a first `npm install` took ~5 minutes); prefer a folder outside cloud sync.
 - Write multi-line files and any script containing template strings or backticks with the Write tool, not shell `-e`/heredocs: quoting mangled backticks here more than once. Small heredocs without backticks are fine.
+- Playwright starts the API, the **worker** (`wait: { stdout: /worker\.started/ }`) and the web app, with `LLM_PROVIDER=fake`; no AI key is needed for the browser tests.
 - No Docker/WSL here. The API's database tests *do* run locally (real PostgreSQL 16 via `pgserver`), but genuine-Supabase tests run only in CI, and so does the Playwright journey against a genuine stack (it can be run locally only against a stand-in auth server that is not in the repository: say so if you do). Do not claim they passed unless output was observed.
 - In Playwright, Next 16 keeps previous routes in the DOM (hidden): query with `getByRole`, which ignores hidden elements, rather than `getByLabel` / `getByText`.
 - Git: the default branch is `main`; line endings are LF via `.gitattributes`.

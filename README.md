@@ -2,7 +2,7 @@
 
 An AI-powered **personal learning coach**. A learner states a goal (a topic, an exam, a certification) or provides study material; StudyPilot builds a personalised roadmap, teaches each topic with structured lessons, tests understanding with quizzes, finds weak spots, and adapts what to study next.
 
-> **Status: accounts, onboarding and learning goals.** You can sign up, set up your study preferences, create a learning goal, see it on your dashboard, edit it, pause, complete or archive it, and find it again after a refresh. Everything is backed by Supabase Auth and PostgreSQL with Row Level Security. There are **no AI features yet**; those arrive in the next milestones ([plan](docs/IMPLEMENTATION_PLAN.md)). Nothing in the UI is fake user data.
+> **Status: accounts, goals and AI roadmaps.** You can sign up, set up your study preferences, create a learning goal, see it on your dashboard, edit it, pause, complete or archive it, and find it again after a refresh. From a goal you can **generate a personalised study roadmap**: a background worker asks an AI planner (Gemini) for a structured plan, the server checks it against your daily minutes and target date, and stores it as a versioned roadmap you can revise without losing earlier versions. Everything is backed by Supabase Auth and PostgreSQL with Row Level Security. Lessons, quizzes and uploads arrive in the next milestones ([plan](docs/IMPLEMENTATION_PLAN.md)). Nothing in the UI is fake user data; the one stand-in, a labelled "Sample plan" from `LLM_PROVIDER=fake`, is for development and tests only.
 
 "StudyPilot" is a working name and is configurable.
 
@@ -32,6 +32,14 @@ npm run dev:api    # http://localhost:8000   (API docs at /docs)
 npm run dev:web    # http://localhost:3000
 ```
 
+To generate roadmaps, also run the background worker (third terminal) and give the API an AI provider in `services/api/.env`:
+
+```bash
+npm run dev:worker   # runs queued roadmap jobs
+```
+
+Set `LLM_PROVIDER=gemini` and your own `GEMINI_API_KEY` (typed into that git-ignored file, never into chat or Git); or use `LLM_PROVIDER=fake` to try the whole flow with a clearly labelled sample plan and no key. Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#run).
+
 | URL | |
 |---|---|
 | <http://localhost:3000> | Landing page |
@@ -39,6 +47,7 @@ npm run dev:web    # http://localhost:3000
 | <http://localhost:3000/onboarding> | Three-step setup for new accounts (every step can be skipped) |
 | <http://localhost:3000/dashboard> | Your goals: in progress, completed, counts (needs sign-in) |
 | <http://localhost:3000/goals/new> · `/goals/archived` | Create a goal · archived goals (restore or delete) |
+| `/goals/<id>` · `/goals/<id>/roadmap` | A goal with its roadmap section · the roadmap: overview, modules, topics, schedule, versions |
 | <http://localhost:3000/settings> | Name, language, time zone and default study preferences |
 | <http://localhost:3000/status> | Live web + API health |
 | <http://localhost:3000/design> | Design system preview |
@@ -80,8 +89,8 @@ docker compose up --build
 | API | Python 3.14, FastAPI, Pydantic, psycopg 3 (explicit SQL), PyJWT, structlog |
 | Data and auth | Supabase Auth, PostgreSQL with Row Level Security; pgvector and private Storage *(later)* |
 | API contract | OpenAPI → generated TypeScript types (`packages/contracts`), checked for drift in CI |
-| Background work *(planned)* | One PostgreSQL-backed durable job queue and a worker process |
-| AI *(planned)* | Configurable LLM provider (Gemini or OpenAI) behind an `LLMProvider` interface |
+| Background work | One PostgreSQL-backed durable job queue (`FOR UPDATE SKIP LOCKED`, leases, retries) and a worker process |
+| AI | Gemini over its REST API behind an `LLMProvider` interface (a labelled `fake` provider for tests); OpenAI *(planned)* |
 | Tests | Vitest + Testing Library, pytest against a real PostgreSQL, Playwright |
 | CI | GitHub Actions (API, web, genuine Supabase stack, Docker, secret scan) |
 | Hosting *(planned)* | Vercel (web), Render (API + worker), Supabase (managed) |
@@ -90,7 +99,7 @@ docker compose up --build
 
 ```
 apps/web             Next.js application (auth, onboarding, dashboard, goals, settings) and its Playwright tests (e2e/)
-services/api         FastAPI application (auth, goals, profile and preferences, health) and its tests
+services/api         FastAPI application (auth, goals, profile, roadmaps and jobs, health), the AI layer (`app/ai`), the background worker (`app/jobs`, `app/worker.py`) and their tests
 packages/contracts   TypeScript types generated from the API's OpenAPI document
 supabase/            Database migrations (the schema's source of truth), local-stack config
 docs/                Product and engineering documentation
@@ -98,14 +107,15 @@ docs/                Product and engineering documentation
 docker-compose.yml   Local stack (API + web)
 ```
 
-Planned, not yet created: `apps/mobile`, the job worker. See [ARCHITECTURE §3](docs/ARCHITECTURE.md#3-repository-structure).
+Planned, not yet created: `apps/mobile`. See [ARCHITECTURE §3](docs/ARCHITECTURE.md#3-repository-structure).
 
 ## What is implemented
 
 - **Accounts:** sign-up, sign-in, sign-out and session refresh with Supabase Auth. Sessions live in server-written HttpOnly cookies; the app never uses Supabase's browser client and never stores a token in script-readable storage. Pages that need an account are protected by the proxy **and** re-checked on the server; the API verifies the access token on every call.
 - **Learning goals:** title, description, type (academic subject, examination, certification, professional skill, interview preparation, or general), current level, optional target date, daily study minutes, preferred languages (English, Hindi, Odia) and learning preferences (examples, quizzes, revision). A goal can be edited, paused and resumed, completed and reopened, archived and restored; only an archived goal can be deleted, and an archived goal is read-only. The rules are enforced by the database as well as the API.
+- **AI roadmaps:** "Generate roadmap" queues a job and returns at once; the page shows live progress. The planner (prompt `roadmap-planner/v1`) is given your level, daily minutes, target date, languages and preferences, with your own words fenced off as data. Its plan has an overview, target outcome, objectives, ordered modules and topics with prerequisites, minutes and day numbers, practice tasks, revision sessions and optional extras, and it says what it assumed and what you should verify (it never presents itself as an official syllabus). **The server, not the model, checks the schedule**: no day exceeds your daily minutes, nothing runs past your target date, prerequisites come first, every objective is taught. One repair attempt, then a clear failure with a retry. Plans are stored as immutable versions: revising or regenerating adds a version, earlier ones stay and can be made current again. Transient AI failures retry with backoff; a crashed worker's job is recovered; a retry never stores a second roadmap.
 - **Onboarding and preferences:** a short three-step wizard (about you, how you like to study, your first goal) where nothing but the goal's title is required; the answers are saved as your defaults and can be changed in Settings. Goals you create later start from those defaults.
-- **Protected API (`/v1`):** `GET|PATCH /v1/me`, `POST /v1/me/onboarding/complete`, `POST|GET /v1/goals`, `GET /v1/goals/summary`, `GET|PATCH|DELETE /v1/goals/{id}`, `PUT /v1/goals/{id}/status`. The caller's identity comes only from a verified token. Another user's goal answers 404. Request bodies that name an owner are rejected.
+- **Protected API (`/v1`):** `GET|PATCH /v1/me`, `POST /v1/me/onboarding/complete`, `POST|GET /v1/goals`, `GET /v1/goals/summary`, `GET|PATCH|DELETE /v1/goals/{id}`, `PUT /v1/goals/{id}/status`, `POST|GET /v1/goals/{id}/roadmaps`, `GET /v1/goals/{id}/jobs`, `GET /v1/roadmaps/{id}`, `POST /v1/roadmaps/{id}/make-current`, `GET /v1/jobs/{id}`, `POST /v1/jobs/{id}/cancel|retry`. The caller's identity comes only from a verified token. Another user's goal answers 404. Request bodies that name an owner are rejected.
 - **Database:** migrations for `profiles` (created automatically at sign-up), `learning_goals` and the goal lifecycle, with Row Level Security, explicit grants and constraints. Every user request runs in a transaction that assumes the `authenticated` role with the verified claims, so a missing filter in code still cannot leak another user's rows.
 - **Web:** landing, sign-up, sign-in, onboarding, dashboard with real counts and lists, create/view/edit goal pages with confirmation for archive and delete, archived goals, settings, design system, status page, fail-fast environment validation, loading/empty/error states, and a layout that works from phone width up. The automated accessibility audit (axe-core, WCAG 2.2 AA, light and dark, phone and desktop) found no violations.
 - **Tooling:** Prettier, ESLint, `tsc`, ruff, pyright (strict), Vitest, pytest, Playwright, one `npm run check`, Dockerfiles, Compose, CI.
