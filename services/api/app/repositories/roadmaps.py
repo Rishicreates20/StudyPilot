@@ -9,6 +9,7 @@ from collections import defaultdict
 from uuid import UUID
 
 from app.core.db import UserConnection
+from app.repositories import lessons as lessons_repo
 from app.schemas.roadmaps import (
     Objective,
     Roadmap,
@@ -17,9 +18,20 @@ from app.schemas.roadmaps import (
     RoadmapSummary,
 )
 
-_SUMMARY_COLUMNS = """
-    id, goal_id, version, status, title, language, topic_count, total_minutes, total_days,
-    daily_minutes, target_date, revision_feedback, based_on_roadmap_id, is_synthetic, created_at
+# Topics whose lesson the learner has finished (any version of it), counted by the database.
+_COMPLETED_TOPICS = """
+    (select count(distinct l.item_id)
+       from public.lesson_progress p
+       join public.lessons l on l.id = p.lesson_id and l.user_id = p.user_id
+       join public.roadmap_items i on i.id = l.item_id
+      where l.roadmap_id = r.id and l.user_id = r.user_id
+        and i.kind = 'topic' and p.status = 'completed')::integer as completed_topics
+"""
+
+_SUMMARY_COLUMNS = f"""
+    r.id, r.goal_id, r.version, r.status, r.title, r.language, r.topic_count, r.total_minutes,
+    r.total_days, r.daily_minutes, r.target_date, r.revision_feedback, r.based_on_roadmap_id,
+    r.is_synthetic, r.created_at, {_COMPLETED_TOPICS}
 """
 
 
@@ -28,8 +40,8 @@ async def list_versions(
 ) -> list[RoadmapSummary]:
     """Every version of a goal's roadmap, newest first."""
     cursor = await connection.execute(
-        f"select {_SUMMARY_COLUMNS} from public.roadmaps"  # noqa: S608 - a module constant
-        " where user_id = %s and goal_id = %s order by version desc",
+        f"select {_SUMMARY_COLUMNS} from public.roadmaps r"  # noqa: S608 - a module constant
+        " where r.user_id = %s and r.goal_id = %s order by r.version desc",
         (user_id, goal_id),
     )
     return [RoadmapSummary.model_validate(row) for row in await cursor.fetchall()]
@@ -40,7 +52,8 @@ async def get_summary(
 ) -> RoadmapSummary | None:
     lock = " for update" if for_update else ""
     cursor = await connection.execute(
-        f"select {_SUMMARY_COLUMNS} from public.roadmaps where id = %s and user_id = %s{lock}",  # noqa: S608
+        f"select {_SUMMARY_COLUMNS} from public.roadmaps r"  # noqa: S608
+        f" where r.id = %s and r.user_id = %s{lock}",
         (roadmap_id, user_id),
     )
     row = await cursor.fetchone()
@@ -58,7 +71,8 @@ async def get_current_id(connection: UserConnection, user_id: UUID, goal_id: UUI
 
 async def get_detail(connection: UserConnection, user_id: UUID, roadmap_id: UUID) -> Roadmap | None:
     cursor = await connection.execute(
-        "select * from public.roadmaps where id = %s and user_id = %s",
+        f"select r.*, {_COMPLETED_TOPICS} from public.roadmaps r"  # noqa: S608
+        " where r.id = %s and r.user_id = %s",
         (roadmap_id, user_id),
     )
     head = await cursor.fetchone()
@@ -87,6 +101,7 @@ async def get_detail(connection: UserConnection, user_id: UUID, roadmap_id: UUID
         " where roadmap_id = %s and user_id = %s order by position",
         (roadmap_id, user_id),
     )
+    study = await lessons_repo.study_by_item(connection, user_id, roadmap_id)
     topics_by_module: dict[UUID, list[RoadmapItem]] = defaultdict(list)
     revisions: list[RoadmapItem] = []
     enrichment: list[RoadmapItem] = []
@@ -103,6 +118,7 @@ async def get_detail(connection: UserConnection, user_id: UUID, roadmap_id: UUID
             estimated_minutes=row["estimated_minutes"],
             day_number=row["day_number"],
             prerequisite_ids=sorted(prerequisites.get(row["id"], []), key=str),
+            study=study.get(row["id"], lessons_repo.NOT_STARTED),
         )
         if item.kind == "topic":
             topics_by_module[row["module_id"]].append(item)

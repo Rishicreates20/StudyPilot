@@ -28,6 +28,20 @@ export type RoadmapList = components["schemas"]["RoadmapList"];
 export type RoadmapItem = components["schemas"]["RoadmapItem"];
 export type RoadmapModule = components["schemas"]["RoadmapModule"];
 export type JobStatus = GenerationJob["status"];
+export type StudyView = components["schemas"]["StudyView"];
+export type LessonDetail = components["schemas"]["LessonDetail"];
+export type LessonVersion = components["schemas"]["LessonVersion"];
+export type LessonDocument = components["schemas"]["Lesson"];
+export type LessonSection = components["schemas"]["LessonSection"];
+export type LessonBlock = LessonSection["blocks"][number];
+export type LessonRequest = components["schemas"]["LessonRequest"];
+export type LessonAdjust = NonNullable<LessonRequest["adjust"]>;
+export type ProgressState = components["schemas"]["ProgressState"];
+export type ProgressUpdate = components["schemas"]["ProgressUpdate"];
+export type ItemStudy = components["schemas"]["ItemStudy"];
+export type NeighbourTopic = components["schemas"]["NeighbourTopic"];
+export type TopicInfo = components["schemas"]["TopicInfo"];
+export type OutlineEntry = components["schemas"]["OutlineEntry"];
 type ProblemDetail = components["schemas"]["ProblemDetail"];
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -234,5 +248,46 @@ export function cancelJob(accessToken: string, jobId: string): Promise<Generatio
 export function retryJob(accessToken: string, jobId: string): Promise<GenerationJob> {
   return call(() =>
     client(accessToken).POST("/v1/jobs/{job_id}/retry", { params: { path: { job_id: jobId } } }),
+  );
+}
+
+/** Queue a lesson for a roadmap topic, or a new version of it. The answer is the job (202). */
+export function startLesson(
+  accessToken: string,
+  itemId: string,
+  body: LessonRequest,
+): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/roadmap-items/{item_id}/lessons", {
+      params: { path: { item_id: itemId } },
+      body,
+    }),
+  );
+}
+
+/** Everything the study page shows for one topic; `lessonId` asks for an earlier version. */
+export function fetchStudy(
+  accessToken: string,
+  itemId: string,
+  lessonId?: string,
+): Promise<StudyView> {
+  return call(() =>
+    client(accessToken).GET("/v1/roadmap-items/{item_id}/study", {
+      params: { path: { item_id: itemId }, query: lessonId ? { lesson_id: lessonId } : {} },
+    }),
+  );
+}
+
+/** Replace the learner's saved place in a lesson. */
+export function saveLessonProgress(
+  accessToken: string,
+  lessonId: string,
+  body: ProgressUpdate,
+): Promise<ProgressState> {
+  return call(() =>
+    client(accessToken).PUT("/v1/lessons/{lesson_id}/progress", {
+      params: { path: { lesson_id: lessonId } },
+      body,
+    }),
   );
 }

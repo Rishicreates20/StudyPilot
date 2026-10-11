@@ -80,6 +80,15 @@ def test_job_and_provider_defaults_are_sensible() -> None:
     assert settings.job_max_attempts == 3
     assert settings.worker_concurrency == 1
     assert settings.roadmap_jobs_per_user_per_day >= 1
+    assert settings.lesson_jobs_per_user_per_day >= 1
+    assert 1 <= settings.lesson_jobs_active_per_user <= 10
+
+
+@pytest.mark.parametrize("name", ["lesson_jobs_per_user_per_day", "lesson_jobs_active_per_user"])
+@pytest.mark.parametrize("value", [0, -1])
+def test_lesson_limits_must_be_positive(name: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        valid_local_settings(**{name: value})
 
 
 # --- Choosing a provider ---------------------------------------------------------------------

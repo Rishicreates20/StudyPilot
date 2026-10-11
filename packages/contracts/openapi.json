@@ -1,6 +1,115 @@
 {
   "components": {
     "schemas": {
+      "CalloutBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "tip",
+              "note",
+              "warning"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "const": "callout",
+            "default": "callout",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "CalloutBlock",
+        "type": "object"
+      },
+      "CodeBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "code": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "language": {
+            "maxLength": 30,
+            "minLength": 1,
+            "pattern": "^[a-z0-9+#._-]+$",
+            "title": "Language",
+            "type": "string"
+          },
+          "type": {
+            "const": "code",
+            "default": "code",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "code"
+        ],
+        "title": "CodeBlock",
+        "type": "object"
+      },
+      "Definition": {
+        "additionalProperties": false,
+        "properties": {
+          "meaning": {
+            "maxLength": 400,
+            "minLength": 5,
+            "title": "Meaning",
+            "type": "string"
+          },
+          "term": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "meaning"
+        ],
+        "title": "Definition",
+        "type": "object"
+      },
       "FieldError": {
         "properties": {
           "code": {
@@ -83,10 +192,37 @@
             "title": "Id",
             "type": "string"
           },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
           "job_type": {
-            "const": "roadmap",
+            "enum": [
+              "roadmap",
+              "lesson"
+            ],
             "title": "Job Type",
             "type": "string"
+          },
+          "lesson_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lesson Id"
           },
           "max_attempts": {
             "title": "Max Attempts",
@@ -142,6 +278,7 @@
           "id",
           "goal_id",
           "job_type",
+          "item_id",
           "status",
           "stage",
           "progress",
@@ -151,6 +288,7 @@
           "error_code",
           "error_message",
           "roadmap_id",
+          "lesson_id",
           "created_at",
           "started_at",
           "finished_at"
@@ -659,6 +797,40 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "ItemStudy": {
+        "description": "How far a learner has got with one roadmap item's lesson.",
+        "properties": {
+          "has_lesson": {
+            "title": "Has Lesson",
+            "type": "boolean"
+          },
+          "sections_done": {
+            "title": "Sections Done",
+            "type": "integer"
+          },
+          "sections_total": {
+            "title": "Sections Total",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "not_started",
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "has_lesson",
+          "sections_done",
+          "sections_total"
+        ],
+        "title": "ItemStudy",
+        "type": "object"
+      },
       "JobList": {
         "properties": {
           "items": {
@@ -673,6 +845,418 @@
           "items"
         ],
         "title": "JobList",
+        "type": "object"
+      },
+      "Lesson": {
+        "additionalProperties": false,
+        "description": "The stored lesson document (content version ``CONTENT_VERSION``).",
+        "properties": {
+          "common_misconceptions": {
+            "items": {
+              "$ref": "#/components/schemas/Misconception"
+            },
+            "maxItems": 5,
+            "title": "Common Misconceptions",
+            "type": "array"
+          },
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/Definition"
+            },
+            "maxItems": 12,
+            "title": "Definitions",
+            "type": "array"
+          },
+          "language": {
+            "pattern": "^[a-z]{2,3}$",
+            "title": "Language",
+            "type": "string"
+          },
+          "learning_objectives": {
+            "items": {
+              "maxLength": 300,
+              "minLength": 5,
+              "type": "string"
+            },
+            "maxItems": 6,
+            "minItems": 2,
+            "title": "Learning Objectives",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/LessonSection"
+            },
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Sections",
+            "type": "array"
+          },
+          "simple_explanation": {
+            "$ref": "#/components/schemas/SimpleExplanation"
+          },
+          "source_references": {
+            "items": {
+              "$ref": "#/components/schemas/SourceReference"
+            },
+            "maxItems": 20,
+            "title": "Source References",
+            "type": "array"
+          },
+          "summary": {
+            "items": {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 2,
+            "title": "Summary",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Title",
+            "type": "string"
+          },
+          "worked_examples": {
+            "items": {
+              "$ref": "#/components/schemas/WorkedExample"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Worked Examples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "language",
+          "title",
+          "learning_objectives",
+          "sections",
+          "definitions",
+          "worked_examples",
+          "common_misconceptions",
+          "summary",
+          "simple_explanation",
+          "source_references"
+        ],
+        "title": "Lesson",
+        "type": "object"
+      },
+      "LessonDetail": {
+        "description": "One version of a lesson with its content and how it was made.",
+        "properties": {
+          "adjust": {
+            "anyOf": [
+              {
+                "enum": [
+                  "simpler",
+                  "more_examples",
+                  "deeper"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjust"
+          },
+          "based_on_lesson_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Based On Lesson Id"
+          },
+          "content": {
+            "$ref": "#/components/schemas/Lesson"
+          },
+          "content_version": {
+            "title": "Content Version",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "revision_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Feedback"
+          },
+          "status": {
+            "enum": [
+              "current",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "status",
+          "title",
+          "adjust",
+          "is_synthetic",
+          "created_at",
+          "item_id",
+          "language",
+          "content",
+          "content_version",
+          "revision_feedback",
+          "based_on_lesson_id",
+          "prompt_version",
+          "provider",
+          "model_id"
+        ],
+        "title": "LessonDetail",
+        "type": "object"
+      },
+      "LessonRequest": {
+        "additionalProperties": false,
+        "description": "Start writing the lesson for a topic, or ask for a different version of it.",
+        "properties": {
+          "adjust": {
+            "anyOf": [
+              {
+                "enum": [
+                  "simpler",
+                  "more_examples",
+                  "deeper"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the new version should differ from the current one: `simpler` (plainer words), `more_examples`, or `deeper`. Implies `regenerate`.",
+            "title": "Adjust"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to change, in the learner's words. Implies `regenerate`.",
+            "title": "Feedback"
+          },
+          "regenerate": {
+            "default": false,
+            "description": "Write a new version even though the topic already has a lesson.",
+            "title": "Regenerate",
+            "type": "boolean"
+          }
+        },
+        "title": "LessonRequest",
+        "type": "object"
+      },
+      "LessonSection": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "callout": "#/components/schemas/CalloutBlock",
+                  "code": "#/components/schemas/CodeBlock",
+                  "list": "#/components/schemas/ListBlock",
+                  "paragraph": "#/components/schemas/ParagraphBlock"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ParagraphBlock"
+                },
+                {
+                  "$ref": "#/components/schemas/ListBlock"
+                },
+                {
+                  "$ref": "#/components/schemas/CodeBlock"
+                },
+                {
+                  "$ref": "#/components/schemas/CalloutBlock"
+                }
+              ]
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "heading": {
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Heading",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^s[0-9]{1,2}$",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "heading",
+          "blocks"
+        ],
+        "title": "LessonSection",
+        "type": "object"
+      },
+      "LessonVersion": {
+        "description": "A stored version of a topic's lesson, without its content.",
+        "properties": {
+          "adjust": {
+            "anyOf": [
+              {
+                "enum": [
+                  "simpler",
+                  "more_examples",
+                  "deeper"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjust"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "current",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "status",
+          "title",
+          "adjust",
+          "is_synthetic",
+          "created_at"
+        ],
+        "title": "LessonVersion",
+        "type": "object"
+      },
+      "ListBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "ordered": {
+            "title": "Ordered",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "list",
+            "default": "list",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordered",
+          "items"
+        ],
+        "title": "ListBlock",
         "type": "object"
       },
       "Me": {
@@ -831,6 +1415,48 @@
         "title": "MeUpdate",
         "type": "object"
       },
+      "Misconception": {
+        "additionalProperties": false,
+        "properties": {
+          "correction": {
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Correction",
+            "type": "string"
+          },
+          "misconception": {
+            "maxLength": 300,
+            "minLength": 5,
+            "title": "Misconception",
+            "type": "string"
+          }
+        },
+        "required": [
+          "misconception",
+          "correction"
+        ],
+        "title": "Misconception",
+        "type": "object"
+      },
+      "NeighbourTopic": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "NeighbourTopic",
+        "type": "object"
+      },
       "Objective": {
         "properties": {
           "id": {
@@ -847,6 +1473,84 @@
           "text"
         ],
         "title": "Objective",
+        "type": "object"
+      },
+      "OutlineEntry": {
+        "description": "One topic in the contents panel.",
+        "properties": {
+          "estimated_minutes": {
+            "title": "Estimated Minutes",
+            "type": "integer"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "revision",
+              "enrichment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "module_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Title"
+          },
+          "study": {
+            "$ref": "#/components/schemas/ItemStudy"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "key",
+          "title",
+          "kind",
+          "module_title",
+          "estimated_minutes",
+          "study"
+        ],
+        "title": "OutlineEntry",
+        "type": "object"
+      },
+      "ParagraphBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "paragraph",
+            "default": "paragraph",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ParagraphBlock",
         "type": "object"
       },
       "Preferences": {
@@ -948,6 +1652,108 @@
         "title": "ProblemDetail",
         "type": "object"
       },
+      "ProgressState": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completed_section_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completed Section Ids",
+            "type": "array"
+          },
+          "current_section_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Section Id"
+          },
+          "last_studied_at": {
+            "format": "date-time",
+            "title": "Last Studied At",
+            "type": "string"
+          },
+          "lesson_id": {
+            "format": "uuid",
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lesson_id",
+          "status",
+          "completed_section_ids",
+          "current_section_id",
+          "started_at",
+          "last_studied_at",
+          "completed_at"
+        ],
+        "title": "ProgressState",
+        "type": "object"
+      },
+      "ProgressUpdate": {
+        "additionalProperties": false,
+        "description": "The learner's whole place in a lesson. Saving replaces what was saved before.",
+        "properties": {
+          "completed": {
+            "default": false,
+            "description": "Finish the lesson. Every section is then recorded as done.",
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "completed_section_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Completed Section Ids",
+            "type": "array"
+          },
+          "current_section_id": {
+            "anyOf": [
+              {
+                "pattern": "^s[0-9]{1,2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Section Id"
+          }
+        },
+        "title": "ProgressUpdate",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "properties": {
           "checks": {
@@ -997,6 +1803,10 @@
               }
             ],
             "title": "Based On Roadmap Id"
+          },
+          "completed_topics": {
+            "title": "Completed Topics",
+            "type": "integer"
           },
           "created_at": {
             "format": "date-time",
@@ -1148,6 +1958,7 @@
           "revision_feedback",
           "based_on_roadmap_id",
           "is_synthetic",
+          "completed_topics",
           "created_at",
           "overview",
           "target_outcome",
@@ -1233,6 +2044,9 @@
             "title": "Prerequisite Ids",
             "type": "array"
           },
+          "study": {
+            "$ref": "#/components/schemas/ItemStudy"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1249,7 +2063,8 @@
           "objective_ids",
           "estimated_minutes",
           "day_number",
-          "prerequisite_ids"
+          "prerequisite_ids",
+          "study"
         ],
         "title": "RoadmapItem",
         "type": "object"
@@ -1355,6 +2170,10 @@
             ],
             "title": "Based On Roadmap Id"
           },
+          "completed_topics": {
+            "title": "Completed Topics",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1449,9 +2268,303 @@
           "revision_feedback",
           "based_on_roadmap_id",
           "is_synthetic",
+          "completed_topics",
           "created_at"
         ],
         "title": "RoadmapSummary",
+        "type": "object"
+      },
+      "SimpleExplanation": {
+        "additionalProperties": false,
+        "properties": {
+          "analogy": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analogy"
+          },
+          "paragraphs": {
+            "items": {
+              "maxLength": 700,
+              "minLength": 5,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Paragraphs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "paragraphs"
+        ],
+        "title": "SimpleExplanation",
+        "type": "object"
+      },
+      "SourceReference": {
+        "additionalProperties": false,
+        "description": "A pointer to a chunk of the learner's own uploaded material that supports the lesson.",
+        "properties": {
+          "chunk_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "chunk_id"
+        ],
+        "title": "SourceReference",
+        "type": "object"
+      },
+      "StudyRoadmap": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "current",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "status",
+          "title"
+        ],
+        "title": "StudyRoadmap",
+        "type": "object"
+      },
+      "StudyView": {
+        "description": "Everything the study page shows for one topic, in one response.",
+        "properties": {
+          "can_generate": {
+            "title": "Can Generate",
+            "type": "boolean"
+          },
+          "goal_archived": {
+            "title": "Goal Archived",
+            "type": "boolean"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lesson": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LessonDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeighbourTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outline": {
+            "items": {
+              "$ref": "#/components/schemas/OutlineEntry"
+            },
+            "title": "Outline",
+            "type": "array"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeighbourTopic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgressState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "roadmap": {
+            "$ref": "#/components/schemas/StudyRoadmap"
+          },
+          "topic": {
+            "$ref": "#/components/schemas/TopicInfo"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/LessonVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "topic",
+          "roadmap",
+          "lesson",
+          "versions",
+          "progress",
+          "job",
+          "previous",
+          "next",
+          "outline",
+          "goal_archived",
+          "can_generate"
+        ],
+        "title": "StudyView",
+        "type": "object"
+      },
+      "TopicInfo": {
+        "description": "The roadmap topic a lesson belongs to.",
+        "properties": {
+          "day_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day Number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "estimated_minutes": {
+            "title": "Estimated Minutes",
+            "type": "integer"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "revision",
+              "enrichment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "module_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Title"
+          },
+          "practice_task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Task"
+          },
+          "roadmap_id": {
+            "format": "uuid",
+            "title": "Roadmap Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "roadmap_id",
+          "key",
+          "kind",
+          "title",
+          "description",
+          "practice_task",
+          "estimated_minutes",
+          "day_number",
+          "module_title"
+        ],
+        "title": "TopicInfo",
         "type": "object"
       },
       "ValidationError": {
@@ -1492,6 +2605,48 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkedExample": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "maxLength": 600,
+            "minLength": 3,
+            "title": "Answer",
+            "type": "string"
+          },
+          "problem": {
+            "maxLength": 800,
+            "minLength": 10,
+            "title": "Problem",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Steps",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "problem",
+          "steps",
+          "answer"
+        ],
+        "title": "WorkedExample",
         "type": "object"
       }
     },
@@ -2137,7 +3292,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "A goal's recent generation jobs, newest first",
+        "summary": "A goal's recent roadmap generation jobs, newest first",
         "tags": [
           "roadmaps"
         ]
@@ -2693,6 +3848,105 @@
         ]
       }
     },
+    "/v1/lessons/{lesson_id}/progress": {
+      "put": {
+        "description": "Replaces the saved progress: which sections are done, where to resume, and whether the\nlesson is finished (which records every section as done). Not allowed on archived goals.",
+        "operationId": "save_lesson_progress_v1_lessons__lesson_id__progress_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lesson_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lesson Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgressUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic or lesson for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save the learner's place in a lesson",
+        "tags": [
+          "lessons"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "description": "Who the API believes the caller is, derived only from the verified access token.",
@@ -2849,6 +4103,233 @@
         "summary": "Finish (or skip) onboarding",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/v1/roadmap-items/{item_id}/lessons": {
+      "post": {
+        "description": "Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.\n\nWithout a body a first lesson is written (409 if the topic already has one). With `adjust`,\n`feedback` or `regenerate`, a NEW version is written when the job completes: earlier versions\nare kept.",
+        "operationId": "start_lesson_v1_roadmap_items__item_id__lessons_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Send the same value when resubmitting a form: you get the same job back.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Send the same value when resubmitting a form: you get the same job back.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LessonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic or lesson for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Revision sessions don't have lessons"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Too many lessons at once, or today's limit"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "AI generation isn't configured"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start writing the lesson for a roadmap topic",
+        "tags": [
+          "lessons"
+        ]
+      }
+    },
+    "/v1/roadmap-items/{item_id}/study": {
+      "get": {
+        "description": "The topic, its lesson (current or the version asked for), the learner's progress, the\nnewest lesson job, the neighbouring topics and the contents of the whole roadmap.",
+        "operationId": "read_study_v1_roadmap_items__item_id__study_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Show this version instead of the current one.",
+            "in": "query",
+            "name": "lesson_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Show this version instead of the current one.",
+              "title": "Lesson Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic or lesson for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Everything the study page needs for one topic",
+        "tags": [
+          "lessons"
         ]
       }
     },

@@ -4,10 +4,11 @@ from typing import Any
 
 import pytest
 
+from app.ai.calls import CallRecord
 from app.ai.fake import FakeProvider
 from app.ai.provider import LLMRateLimited
 from app.ai.roadmap.context import OutlineModule, OutlineTopic
-from app.ai.roadmap.planner import CallRecord, PlanInvalid, plan_roadmap
+from app.ai.roadmap.planner import PlanInvalid, plan_roadmap
 from app.ai.roadmap.prompts import PROMPT_VERSION, SYSTEM_PROMPT, render_user_prompt
 from app.ai.roadmap.schema import PlannedRoadmap
 from app.ai.roadmap.validation import validate_plan

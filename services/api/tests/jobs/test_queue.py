@@ -8,7 +8,7 @@ import pytest
 from app.core.db import Database
 from app.jobs import queue
 from app.jobs.errors import JobCancelled, LeaseLost
-from app.jobs.roadmap_job import Lease, backoff_seconds
+from app.jobs.runtime import Lease, backoff_seconds
 from app.jobs.worker import Worker
 from support.database import admin, create_auth_user
 from support.rows import add_goal, add_job

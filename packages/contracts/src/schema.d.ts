@@ -117,7 +117,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A goal's recent generation jobs, newest first */
+        /** A goal's recent roadmap generation jobs, newest first */
         get: operations["list_goal_jobs_v1_goals__goal_id__jobs_get"];
         put?: never;
         post?: never;
@@ -231,6 +231,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/lessons/{lesson_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the learner's place in a lesson
+         * @description Replaces the saved progress: which sections are done, where to resume, and whether the
+         *     lesson is finished (which records every section as done). Not allowed on archived goals.
+         */
+        put: operations["save_lesson_progress_v1_lessons__lesson_id__progress_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -269,6 +290,51 @@ export interface paths {
          * @description Marks onboarding as done. Calling it again is harmless; the first time is kept.
          */
         post: operations["complete_onboarding_v1_me_onboarding_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap-items/{item_id}/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start writing the lesson for a roadmap topic
+         * @description Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.
+         *
+         *     Without a body a first lesson is written (409 if the topic already has one). With `adjust`,
+         *     `feedback` or `regenerate`, a NEW version is written when the job completes: earlier versions
+         *     are kept.
+         */
+        post: operations["start_lesson_v1_roadmap_items__item_id__lessons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap-items/{item_id}/study": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the study page needs for one topic
+         * @description The topic, its lesson (current or the version asked for), the learner's progress, the
+         *     newest lesson job, the neighbouring topics and the contents of the whole roadmap.
+         */
+        get: operations["read_study_v1_roadmap_items__item_id__study_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -316,6 +382,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CalloutBlock */
+        CalloutBlock: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tip" | "note" | "warning";
+            /** Text */
+            text: string;
+            /** Title */
+            title?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "callout";
+        };
+        /** CodeBlock */
+        CodeBlock: {
+            /** Caption */
+            caption?: string | null;
+            /** Code */
+            code: string;
+            /** Language */
+            language: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "code";
+        };
+        /** Definition */
+        Definition: {
+            /** Meaning */
+            meaning: string;
+            /** Term */
+            term: string;
+        };
         /** FieldError */
         FieldError: {
             /** Code */
@@ -352,11 +456,15 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Item Id */
+            item_id: string | null;
             /**
              * Job Type
-             * @constant
+             * @enum {string}
              */
-            job_type: "roadmap";
+            job_type: "roadmap" | "lesson";
+            /** Lesson Id */
+            lesson_id: string | null;
             /** Max Attempts */
             max_attempts: number;
             /** Progress */
@@ -523,10 +631,173 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * ItemStudy
+         * @description How far a learner has got with one roadmap item's lesson.
+         */
+        ItemStudy: {
+            /** Has Lesson */
+            has_lesson: boolean;
+            /** Sections Done */
+            sections_done: number;
+            /** Sections Total */
+            sections_total: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_started" | "in_progress" | "completed";
+        };
         /** JobList */
         JobList: {
             /** Items */
             items: components["schemas"]["GenerationJob"][];
+        };
+        /**
+         * Lesson
+         * @description The stored lesson document (content version ``CONTENT_VERSION``).
+         */
+        Lesson: {
+            /** Common Misconceptions */
+            common_misconceptions: components["schemas"]["Misconception"][];
+            /** Definitions */
+            definitions: components["schemas"]["Definition"][];
+            /** Language */
+            language: string;
+            /** Learning Objectives */
+            learning_objectives: string[];
+            /** Sections */
+            sections: components["schemas"]["LessonSection"][];
+            simple_explanation: components["schemas"]["SimpleExplanation"];
+            /** Source References */
+            source_references: components["schemas"]["SourceReference"][];
+            /** Summary */
+            summary: string[];
+            /** Title */
+            title: string;
+            /** Worked Examples */
+            worked_examples: components["schemas"]["WorkedExample"][];
+        };
+        /**
+         * LessonDetail
+         * @description One version of a lesson with its content and how it was made.
+         */
+        LessonDetail: {
+            /** Adjust */
+            adjust: ("simpler" | "more_examples" | "deeper") | null;
+            /** Based On Lesson Id */
+            based_on_lesson_id: string | null;
+            content: components["schemas"]["Lesson"];
+            /** Content Version */
+            content_version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Language */
+            language: string;
+            /** Model Id */
+            model_id: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Provider */
+            provider: string;
+            /** Revision Feedback */
+            revision_feedback: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "superseded";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * LessonRequest
+         * @description Start writing the lesson for a topic, or ask for a different version of it.
+         */
+        LessonRequest: {
+            /**
+             * Adjust
+             * @description How the new version should differ from the current one: `simpler` (plainer words), `more_examples`, or `deeper`. Implies `regenerate`.
+             */
+            adjust?: ("simpler" | "more_examples" | "deeper") | null;
+            /**
+             * Feedback
+             * @description What to change, in the learner's words. Implies `regenerate`.
+             */
+            feedback?: string | null;
+            /**
+             * Regenerate
+             * @description Write a new version even though the topic already has a lesson.
+             * @default false
+             */
+            regenerate: boolean;
+        };
+        /** LessonSection */
+        LessonSection: {
+            /** Blocks */
+            blocks: (components["schemas"]["ParagraphBlock"] | components["schemas"]["ListBlock"] | components["schemas"]["CodeBlock"] | components["schemas"]["CalloutBlock"])[];
+            /** Heading */
+            heading: string;
+            /** Id */
+            id: string;
+        };
+        /**
+         * LessonVersion
+         * @description A stored version of a topic's lesson, without its content.
+         */
+        LessonVersion: {
+            /** Adjust */
+            adjust: ("simpler" | "more_examples" | "deeper") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "superseded";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** ListBlock */
+        ListBlock: {
+            /** Items */
+            items: string[];
+            /** Ordered */
+            ordered: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "list";
         };
         /**
          * Me
@@ -573,12 +844,64 @@ export interface components {
             /** Timezone */
             timezone?: string | null;
         };
+        /** Misconception */
+        Misconception: {
+            /** Correction */
+            correction: string;
+            /** Misconception */
+            misconception: string;
+        };
+        /** NeighbourTopic */
+        NeighbourTopic: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+        };
         /** Objective */
         Objective: {
             /** Id */
             id: string;
             /** Text */
             text: string;
+        };
+        /**
+         * OutlineEntry
+         * @description One topic in the contents panel.
+         */
+        OutlineEntry: {
+            /** Estimated Minutes */
+            estimated_minutes: number;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "revision" | "enrichment";
+            /** Module Title */
+            module_title: string | null;
+            study: components["schemas"]["ItemStudy"];
+            /** Title */
+            title: string;
+        };
+        /** ParagraphBlock */
+        ParagraphBlock: {
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paragraph";
         };
         /**
          * Preferences
@@ -612,6 +935,51 @@ export interface components {
              */
             type: string;
         };
+        /** ProgressState */
+        ProgressState: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Completed Section Ids */
+            completed_section_ids: string[];
+            /** Current Section Id */
+            current_section_id: string | null;
+            /**
+             * Last Studied At
+             * Format: date-time
+             */
+            last_studied_at: string;
+            /**
+             * Lesson Id
+             * Format: uuid
+             */
+            lesson_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_progress" | "completed";
+        };
+        /**
+         * ProgressUpdate
+         * @description The learner's whole place in a lesson. Saving replaces what was saved before.
+         */
+        ProgressUpdate: {
+            /**
+             * Completed
+             * @description Finish the lesson. Every section is then recorded as done.
+             * @default false
+             */
+            completed: boolean;
+            /** Completed Section Ids */
+            completed_section_ids?: string[];
+            /** Current Section Id */
+            current_section_id?: string | null;
+        };
         /** ReadinessResponse */
         ReadinessResponse: {
             /** Checks */
@@ -630,6 +998,8 @@ export interface components {
             assumptions: string[];
             /** Based On Roadmap Id */
             based_on_roadmap_id: string | null;
+            /** Completed Topics */
+            completed_topics: number;
             /**
              * Created At
              * Format: date-time
@@ -723,6 +1093,7 @@ export interface components {
             practice_task: string | null;
             /** Prerequisite Ids */
             prerequisite_ids: string[];
+            study: components["schemas"]["ItemStudy"];
             /** Title */
             title: string;
         };
@@ -764,6 +1135,8 @@ export interface components {
         RoadmapSummary: {
             /** Based On Roadmap Id */
             based_on_roadmap_id: string | null;
+            /** Completed Topics */
+            completed_topics: number;
             /**
              * Created At
              * Format: date-time
@@ -805,6 +1178,103 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SimpleExplanation */
+        SimpleExplanation: {
+            /** Analogy */
+            analogy?: string | null;
+            /** Paragraphs */
+            paragraphs: string[];
+        };
+        /**
+         * SourceReference
+         * @description A pointer to a chunk of the learner's own uploaded material that supports the lesson.
+         */
+        SourceReference: {
+            /** Chunk Id */
+            chunk_id: string;
+            /** Note */
+            note?: string | null;
+            /** Source Id */
+            source_id: string;
+        };
+        /** StudyRoadmap */
+        StudyRoadmap: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "superseded";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * StudyView
+         * @description Everything the study page shows for one topic, in one response.
+         */
+        StudyView: {
+            /** Can Generate */
+            can_generate: boolean;
+            /** Goal Archived */
+            goal_archived: boolean;
+            job: components["schemas"]["GenerationJob"] | null;
+            lesson: components["schemas"]["LessonDetail"] | null;
+            next: components["schemas"]["NeighbourTopic"] | null;
+            /** Outline */
+            outline: components["schemas"]["OutlineEntry"][];
+            previous: components["schemas"]["NeighbourTopic"] | null;
+            progress: components["schemas"]["ProgressState"] | null;
+            roadmap: components["schemas"]["StudyRoadmap"];
+            topic: components["schemas"]["TopicInfo"];
+            /** Versions */
+            versions: components["schemas"]["LessonVersion"][];
+        };
+        /**
+         * TopicInfo
+         * @description The roadmap topic a lesson belongs to.
+         */
+        TopicInfo: {
+            /** Day Number */
+            day_number: number | null;
+            /** Description */
+            description: string;
+            /** Estimated Minutes */
+            estimated_minutes: number;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "revision" | "enrichment";
+            /** Module Title */
+            module_title: string | null;
+            /** Practice Task */
+            practice_task: string | null;
+            /**
+             * Roadmap Id
+             * Format: uuid
+             */
+            roadmap_id: string;
+            /** Title */
+            title: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -817,6 +1287,17 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WorkedExample */
+        WorkedExample: {
+            /** Answer */
+            answer: string;
+            /** Problem */
+            problem: string;
+            /** Steps */
+            steps: string[];
+            /** Title */
+            title: string;
         };
     };
     responses: never;
@@ -1676,6 +2157,77 @@ export interface operations {
             };
         };
     };
+    save_lesson_progress_v1_lessons__lesson_id__progress_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lesson_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProgressUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProgressState"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic or lesson for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_me_v1_me_get: {
         parameters: {
             query?: never;
@@ -1790,6 +2342,150 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_lesson_v1_roadmap_items__item_id__lessons_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a form: you get the same job back. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic or lesson for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Revision sessions don't have lessons */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Too many lessons at once, or today's limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description AI generation isn't configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_study_v1_roadmap_items__item_id__study_get: {
+        parameters: {
+            query?: {
+                /** @description Show this version instead of the current one. */
+                lesson_id?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyView"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic or lesson for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description A dependency is temporarily unavailable */

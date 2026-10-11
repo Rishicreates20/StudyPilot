@@ -28,28 +28,17 @@ from app.repositories import goals as goals_repo
 from app.repositories import jobs as jobs_repo
 from app.repositories import roadmaps as roadmaps_repo
 from app.schemas.goals import Goal, today_utc
-from app.schemas.roadmaps import (
-    GenerationJob,
-    JobList,
-    Roadmap,
-    RoadmapList,
-    RoadmapRequest,
-    RoadmapSummary,
-)
+from app.schemas.jobs import GenerationJob, JobList
+from app.schemas.roadmaps import Roadmap, RoadmapList, RoadmapRequest, RoadmapSummary
 
 log = structlog.get_logger("app.roadmaps")
 
-_FINISHED = frozenset({"completed", "failed", "cancelled"})
 _ALLOWANCE_WINDOW = timedelta(hours=24)
 
 
 def _goal_not_found() -> NotFoundError:
     # Same answer for "does not exist" and "belongs to someone else".
     return NotFoundError("Goal not found.", code="GOAL_NOT_FOUND")
-
-
-def _job_not_found() -> NotFoundError:
-    return NotFoundError("Job not found.", code="JOB_NOT_FOUND")
 
 
 def _roadmap_not_found() -> NotFoundError:
@@ -101,8 +90,10 @@ async def start_generation(
         )
         if existing is not None:
             stored = await jobs_repo.get_request(connection, principal.user_id, existing.id)
-            same = existing.goal_id == goal_id and (stored or {}).get("feedback") == request.get(
-                "feedback"
+            same = (
+                existing.job_type == "roadmap"
+                and existing.goal_id == goal_id
+                and (stored or {}).get("feedback") == request.get("feedback")
             )
             if same:
                 return existing  # the same form submitted twice: same job
@@ -193,43 +184,3 @@ async def list_jobs(
     await _own_goal(connection, principal, goal_id)
     jobs = await jobs_repo.list_for_goal(connection, principal.user_id, goal_id, limit=limit)
     return JobList(items=jobs)
-
-
-async def get_job(connection: UserConnection, principal: Principal, job_id: UUID) -> GenerationJob:
-    job = await jobs_repo.get(connection, principal.user_id, job_id)
-    if job is None:
-        raise _job_not_found()
-    return job
-
-
-async def cancel_job(
-    connection: UserConnection, principal: Principal, job_id: UUID
-) -> GenerationJob:
-    """Ask for a job to stop. Cancelling a finished job changes nothing."""
-    job = await get_job(connection, principal, job_id)
-    if job.status in _FINISHED:
-        return job
-    await jobs_repo.request_cancel(connection, principal.user_id, job_id)
-    log.info("roadmap.cancel_requested", job_id=str(job_id))
-    return await get_job(connection, principal, job_id)
-
-
-async def retry_job(
-    connection: UserConnection, principal: Principal, job_id: UUID, *, settings: Settings
-) -> GenerationJob:
-    """Queue a fresh job repeating a failed one. The failed job stays as history."""
-    job = await get_job(connection, principal, job_id)
-    if job.status != "failed":
-        raise ConflictError(
-            "Only a generation that failed can be retried.", code="JOB_NOT_RETRYABLE"
-        )
-    request = await jobs_repo.get_request(connection, principal.user_id, job_id) or {}
-    feedback = request.get("feedback")
-    return await start_generation(
-        connection,
-        principal,
-        job.goal_id,
-        RoadmapRequest(feedback=feedback if isinstance(feedback, str) else None),
-        idempotency_key=None,
-        settings=settings,
-    )

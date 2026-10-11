@@ -78,6 +78,37 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Restore the goal first",
     message: "An archived goal is read-only, so its roadmap can't be changed.",
   },
+  "lesson-exists": {
+    variant: "info",
+    title: "This topic already has a lesson",
+    message: "It is shown below. You can ask for a new version of it at any time.",
+  },
+  "lesson-cancelled": {
+    variant: "info",
+    title: "Lesson cancelled",
+    message: "Nothing was saved. You can start again whenever you like.",
+  },
+  "lesson-queue-full": {
+    variant: "warning",
+    title: "Other lessons are still being written",
+    message: "Wait for one to finish, then try again.",
+  },
+  "lesson-limit": {
+    variant: "warning",
+    title: "Daily lesson limit reached",
+    message: "You have used today's lesson writing. Please try again tomorrow.",
+  },
+  "roadmap-not-current": {
+    variant: "warning",
+    title: "This topic belongs to an earlier roadmap version",
+    message:
+      "Make that version current from the roadmap page to write new lessons for it. Lessons that were already written can still be read.",
+  },
+  "not-lessonable": {
+    variant: "info",
+    title: "Revision sessions don't have lessons",
+    message: "They are a time to recall what you have studied.",
+  },
   "status-conflict": {
     variant: "warning",
     title: "That change isn't possible right now",

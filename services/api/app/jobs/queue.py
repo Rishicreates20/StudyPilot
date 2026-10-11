@@ -16,11 +16,12 @@ from uuid import UUID
 
 from psycopg.types.json import Jsonb
 
-from app.ai.roadmap.planner import CallRecord
+from app.ai.calls import CallRecord
 from app.core.db import SystemConnection
 
 _JOB_COLUMNS = (
-    "id, user_id, goal_id, job_type, attempts, max_attempts, request, checkpoint, cancel_requested"
+    "id, user_id, goal_id, item_id, job_type, attempts, max_attempts, request, checkpoint,"
+    " cancel_requested"
 )
 
 
@@ -29,6 +30,8 @@ class Job:
     id: UUID
     user_id: UUID
     goal_id: UUID
+    # The roadmap item a lesson job writes for; None for roadmap jobs.
+    item_id: UUID | None
     job_type: str
     attempts: int
     max_attempts: int
@@ -42,6 +45,7 @@ def _job(row: dict[str, Any]) -> Job:
         id=row["id"],
         user_id=row["user_id"],
         goal_id=row["goal_id"],
+        item_id=row["item_id"],
         job_type=row["job_type"],
         attempts=row["attempts"],
         max_attempts=row["max_attempts"],

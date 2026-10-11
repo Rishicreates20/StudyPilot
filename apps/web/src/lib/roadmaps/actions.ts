@@ -3,8 +3,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ApiError, cancelJob, makeRoadmapCurrent, retryJob, startRoadmap } from "@/lib/api/server";
-import { sessionEndedUrlFor, signInUrlFor } from "@/lib/auth/paths";
-import { getAccessToken, getSessionUser } from "@/lib/auth/session";
+import { requireSession } from "@/lib/auth/action-session";
+import { sessionEndedUrlFor } from "@/lib/auth/paths";
 import { goalPath, isGoalId } from "@/lib/goals/ids";
 import { roadmapPath } from "@/lib/roadmaps/paths";
 
@@ -35,13 +35,6 @@ function noticeForRefusal(error: ApiError): string {
     default:
       return error.status === 409 ? "status-conflict" : "unavailable";
   }
-}
-
-async function requireSession(returnTo: string): Promise<{ accessToken: string }> {
-  const user = await getSessionUser();
-  const accessToken = user ? await getAccessToken() : null;
-  if (!accessToken) redirect(signInUrlFor(returnTo));
-  return { accessToken };
 }
 
 /** The optional "what should change?" note: trimmed, and never longer than the API accepts. */

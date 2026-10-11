@@ -6,14 +6,9 @@ from fastapi import APIRouter, Header, Query, Request, Response
 from app.api.deps import DatabaseDep
 from app.core.errors import ProblemDetail
 from app.core.security import CurrentPrincipal
-from app.schemas.roadmaps import (
-    GenerationJob,
-    JobList,
-    Roadmap,
-    RoadmapList,
-    RoadmapRequest,
-    RoadmapSummary,
-)
+from app.schemas.jobs import GenerationJob, JobList
+from app.schemas.roadmaps import Roadmap, RoadmapList, RoadmapRequest, RoadmapSummary
+from app.services import jobs as jobs_service
 from app.services import roadmaps as roadmaps_service
 
 router = APIRouter(tags=["roadmaps"])
@@ -93,7 +88,7 @@ async def list_roadmaps(
 @router.get(
     "/goals/{goal_id}/jobs",
     response_model=JobList,
-    summary="A goal's recent generation jobs, newest first",
+    summary="A goal's recent roadmap generation jobs, newest first",
     responses=_NOT_FOUND,
 )
 async def list_goal_jobs(
@@ -143,7 +138,7 @@ async def read_job(
     job_id: UUID, principal: CurrentPrincipal, database: DatabaseDep
 ) -> GenerationJob:
     async with database.user_transaction(principal) as connection:
-        return await roadmaps_service.get_job(connection, principal, job_id)
+        return await jobs_service.get_job(connection, principal, job_id)
 
 
 @router.post(
@@ -157,7 +152,7 @@ async def cancel_job(
 ) -> GenerationJob:
     """A job that hasn't started is cancelled at once; a running one stops at its next stage."""
     async with database.user_transaction(principal) as connection:
-        return await roadmaps_service.cancel_job(connection, principal, job_id)
+        return await jobs_service.cancel_job(connection, principal, job_id)
 
 
 @router.post(
@@ -177,6 +172,6 @@ async def retry_job(
     """Queues a new job that repeats the failed one; the failed job stays as history."""
     settings = request.app.state.settings
     async with database.user_transaction(principal) as connection:
-        job = await roadmaps_service.retry_job(connection, principal, job_id, settings=settings)
+        job = await jobs_service.retry_job(connection, principal, job_id, settings=settings)
     response.headers["Location"] = f"/v1/jobs/{job.id}"
     return job

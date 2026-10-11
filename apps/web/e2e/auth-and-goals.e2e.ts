@@ -7,7 +7,9 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
  *
  *   sign up → onboarding → a goal on the dashboard → edit → reload and it is still there →
  *   generate a roadmap in the background → it persists, respects the daily minutes and can be
- *   revised into a new version without losing the old one → settings persist →
+ *   revised into a new version without losing the old one → a lesson is written for a topic,
+ *   studied, explained simply, resumed after a reload, finished and re-written as another
+ *   version → settings persist →
  *   pause / complete / archive / restore / delete (with confirmations) →
  *   sign out → sign back in → another user can see and change none of it.
  *
@@ -110,6 +112,7 @@ test.describe("onboarding, goals and the dashboard", () => {
   const renamedGoal = `${firstGoal} (renamed)`;
   const secondGoal = `Pass the CKA exam ${randomUUID().slice(0, 6)}`;
   let firstGoalId = "";
+  let lessonItemId = "";
 
   test("signed-out visitors cannot reach protected pages or the API", async ({ page, request }) => {
     for (const path of ["/dashboard", "/onboarding", "/settings", "/goals/new"]) {
@@ -324,6 +327,166 @@ test.describe("onboarding, goals and the dashboard", () => {
     await expect(page.getByText("We couldn't find that")).toBeVisible();
   });
 
+  test("a lesson is written in the background, studied, and is still there after a reload", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+    await expect(page.getByRole("heading", { name: "Your progress" })).toBeVisible();
+    await expect(page.getByText(/0 of \d+ topics finished/)).toBeVisible();
+
+    await page.getByRole("link", { name: /^Start studying:/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/learn/[0-9a-f-]{36}$`));
+    lessonItemId = page.url().split("/learn/")[1] ?? "";
+    await expect(page.getByText("This topic doesn't have a lesson yet")).toBeVisible();
+
+    // The lesson is written by the worker; the page follows its progress by itself.
+    await page.getByRole("button", { name: "Write this lesson" }).click();
+    await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible({
+      timeout: 45_000,
+    });
+
+    await expect(page.getByRole("heading", { name: "What you will learn" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Key terms" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Worked examples" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible();
+    await expect(page.getByText("Sample lesson", { exact: true })).toBeVisible();
+    await expect(page.getByText(/written from general knowledge/)).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What you will learn" })).toBeVisible();
+  });
+
+  test("Explain simply shows the lesson's own simple explanation and hides it again", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    await expect(page.getByRole("heading", { name: "In simple words" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Explain simply" }).click();
+    await expect(page.getByRole("heading", { name: "In simple words" })).toBeVisible();
+    await expect(page.getByText(/picture frame with nothing in it yet/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Hide the simple explanation" }).click();
+    await expect(page.getByRole("heading", { name: "In simple words" })).toHaveCount(0);
+  });
+
+  test("progress is saved and the lesson picks up where the learner left off", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    const token = await accessTokenOf(page.context());
+    const study = async () => {
+      const response = await page.request.get(`${API_URL}/v1/roadmap-items/${lessonItemId}/study`, {
+        headers: bearer(token),
+      });
+      return (await response.json()) as {
+        lesson: { id: string; content: { sections: { id: string }[] } };
+        progress: { completed_section_ids: string[]; current_section_id: string | null } | null;
+      };
+    };
+    const sections = (await study()).lesson.content.sections.map((section) => section.id);
+    expect(sections.length).toBeGreaterThan(2);
+
+    // Tick the first section...
+    await page
+      .getByRole("button", { name: /Mark section as done for/ })
+      .first()
+      .click();
+    await expect(page.getByTestId("save-status")).toHaveText("Progress saved");
+    await expect(page.getByText(`1 of ${sections.length} sections done`).first()).toBeVisible();
+
+    // ...and read on to the end: the reader's position is saved too.
+    await page.keyboard.press("End");
+    await expect
+      .poll(async () => (await study()).progress?.current_section_id, { timeout: 15_000 })
+      .toBe(sections.at(-1));
+
+    // Reopen the lesson later: the progress is back, and the page offers to continue.
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    await expect(page.getByText("Welcome back")).toBeVisible();
+    await expect(page.getByText(/You left off at/)).toBeVisible();
+    await expect(page.getByText(`1 of ${sections.length} sections done`).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Start from the top" }).click();
+    await expect(page.getByText("Welcome back")).toHaveCount(0);
+
+    // The roadmap shows the topic as in progress.
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+    await expect(page.getByRole("link", { name: /^Continue studying:/ })).toBeVisible();
+    await expect(page.getByText(`1 of ${sections.length} sections`).first()).toBeVisible();
+  });
+
+  test("finishing a lesson marks the topic done on the roadmap and the goal", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+
+    await page.getByRole("button", { name: "Finish lesson" }).click();
+    await expect(page.getByRole("heading", { name: "Lesson complete" })).toBeVisible();
+    await expect(page.getByTestId("save-status")).toHaveText("Progress saved");
+    await expect(page.getByRole("link", { name: /^Next topic:/ })).toBeVisible();
+
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+    await expect(page.getByText(/^1 of \d+ topics finished$/)).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Review/ }).first()).toBeVisible();
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText(/^1 of \d+ topics finished$/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Continue studying" })).toBeVisible();
+  });
+
+  test("the next and previous topic are one click away, and the contents list them all", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+
+    const contents = page.getByRole("complementary", { name: "Contents" });
+    await expect(contents.getByRole("navigation", { name: "In this lesson" })).toBeVisible();
+    const topics = contents.getByRole("navigation", { name: "Roadmap topics" });
+    await expect(topics.getByRole("link").first()).toHaveAttribute("aria-current", "page");
+    await expect(topics.getByText("Done").first()).toBeVisible();
+
+    await page
+      .getByRole("navigation", { name: "Topic navigation" })
+      .getByText("Next topic")
+      .click();
+    await expect(page.getByText("This topic doesn't have a lesson yet")).toBeVisible();
+    await expect(page).not.toHaveURL(new RegExp(`/learn/${lessonItemId}$`));
+
+    await page
+      .getByRole("navigation", { name: "Topic navigation" })
+      .getByText("Previous topic")
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/learn/${lessonItemId}$`));
+  });
+
+  test("another version can be asked for: the first is kept, each has its own progress", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+
+    await page.getByRole("button", { name: "Write another version" }).click();
+    const dialog = page.getByRole("dialog", { name: "Write another version of this lesson" });
+    await dialog.getByRole("radio", { name: /Simpler/ }).check();
+    await dialog.getByLabel(/Anything else/).fill("Use cooking as the example");
+    await dialog.getByRole("button", { name: "Write the new version" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/learn/${lessonItemId}$`));
+    const versions = page.getByRole("region", { name: "Versions of this lesson" });
+    await expect(versions.getByText("Version 2 (reading)")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("This version was asked to use simpler words.")).toBeVisible();
+    await expect(page.getByText("0 of 4 sections done").first()).toBeVisible(); // a fresh version
+
+    // The first version is untouched, and still finished.
+    await versions.getByRole("link", { name: "Version 1" }).click();
+    await expect(page).toHaveURL(/\?lesson=/);
+    await expect(page.getByText("Earlier version", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Lesson complete" })).toBeVisible();
+  });
+
   test("a goal can be paused, resumed, completed and reopened", async ({ page }) => {
     await signIn(page, ada);
     await page.goto(`/goals/${firstGoalId}`);
@@ -397,6 +560,14 @@ test.describe("onboarding, goals and the dashboard", () => {
     await expect(page.getByText(/its roadmap is read-only/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Revise or regenerate" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Make current" })).toHaveCount(0);
+
+    // Lessons stay readable, and nothing in them can be changed.
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    await expect(page.getByText(/its lessons are read-only/).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Write another version" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Mark section as done/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Finish lesson" })).toHaveCount(0);
 
     await page.goto(`/goals/${firstGoalId}`);
     await page.getByRole("button", { name: "Restore" }).click();
@@ -485,6 +656,8 @@ test.describe("onboarding, goals and the dashboard", () => {
     let adasGoalId = "";
     let adasRoadmapId = "";
     let adasJobId = "";
+    let adasItemId = "";
+    let adasLessonId = "";
 
     test("sees none of Ada's goals and starts from a clean slate", async ({ browser, page }) => {
       await signIn(page, ada);
@@ -500,6 +673,21 @@ test.describe("onboarding, goals and the dashboard", () => {
       });
       adasJobId = (await jobs.json()).items[0].id;
       expect(adasRoadmapId).toBeTruthy();
+
+      // She has a written lesson too, for the next tests to try to reach.
+      await page.goto(`/goals/${adasGoalId}/roadmap`);
+      await page.getByRole("link", { name: /^Start studying:/ }).click();
+      await expect(page).toHaveURL(new RegExp(`/goals/${adasGoalId}/learn/[0-9a-f-]{36}$`));
+      adasItemId = page.url().split("/learn/")[1] ?? "";
+      await page.getByRole("button", { name: "Write this lesson" }).click();
+      await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible({
+        timeout: 45_000,
+      });
+      const study = await page.request.get(`${API_URL}/v1/roadmap-items/${adasItemId}/study`, {
+        headers: bearer(adasToken),
+      });
+      adasLessonId = (await study.json()).lesson.id;
+      expect(adasLessonId).toBeTruthy();
 
       const other = await freshContext(browser);
       try {
@@ -567,6 +755,42 @@ test.describe("onboarding, goals and the dashboard", () => {
       }
     });
 
+    test("cannot read, start or save progress in Ada's lessons even with a real token", async ({
+      browser,
+      request,
+    }) => {
+      const other = await freshContext(browser);
+      try {
+        await signIn(other.page, grace);
+        const token = await accessTokenOf(other.context);
+
+        const attempts = [
+          await request.get(`${API_URL}/v1/roadmap-items/${adasItemId}/study`, {
+            headers: bearer(token),
+          }),
+          await request.get(`${API_URL}/v1/roadmap-items/${adasItemId}/study`, {
+            headers: bearer(token),
+            params: { lesson_id: adasLessonId },
+          }),
+          await request.post(`${API_URL}/v1/roadmap-items/${adasItemId}/lessons`, {
+            headers: bearer(token),
+            data: { regenerate: true },
+          }),
+          await request.put(`${API_URL}/v1/lessons/${adasLessonId}/progress`, {
+            headers: bearer(token),
+            data: { completed: true },
+          }),
+        ];
+        expect(attempts.map((response) => response.status())).toEqual([404, 404, 404, 404]);
+
+        // Her page for Ada's topic looks exactly like a page that doesn't exist.
+        await other.page.goto(`/goals/${adasGoalId}/learn/${adasItemId}`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+      } finally {
+        await other.context.close();
+      }
+    });
+
     test("and Ada's goal is untouched afterwards", async ({ page }) => {
       await signIn(page, ada);
 
@@ -574,6 +798,9 @@ test.describe("onboarding, goals and the dashboard", () => {
       await expect(page.getByRole("heading", { level: 1, name: secondGoal })).toBeVisible();
       await expect(page.getByText("Active", { exact: true })).toBeVisible();
       await expect(page.getByText("Version 1 of 1")).toBeVisible(); // and so is her roadmap
+
+      await page.goto(`/goals/${adasGoalId}/learn/${adasItemId}`); // and her lesson
+      await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible();
     });
   });
 });

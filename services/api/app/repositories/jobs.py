@@ -12,14 +12,15 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 
 from app.core.db import UserConnection
-from app.schemas.roadmaps import GenerationJob
+from app.schemas.jobs import GenerationJob, JobType
 
 _SELECT = """
-    select j.id, j.goal_id, j.job_type, j.status, j.stage, j.progress, j.attempts, j.max_attempts,
-           j.cancel_requested, j.error_code, j.error_message, r.id as roadmap_id, j.created_at,
-           j.started_at, j.finished_at
+    select j.id, j.goal_id, j.item_id, j.job_type, j.status, j.stage, j.progress, j.attempts,
+           j.max_attempts, j.cancel_requested, j.error_code, j.error_message,
+           r.id as roadmap_id, l.id as lesson_id, j.created_at, j.started_at, j.finished_at
     from public.generation_jobs j
     left join public.roadmaps r on r.job_id = j.id
+    left join public.lessons l on l.job_id = j.id
 """
 
 
@@ -30,11 +31,14 @@ async def insert(
     *,
     idempotency_key: str | None,
     request: dict[str, Any],
+    job_type: JobType = "roadmap",
+    item_id: UUID | None = None,
 ) -> GenerationJob:
     cursor = await connection.execute(
-        "insert into public.generation_jobs (user_id, goal_id, job_type, idempotency_key, request)"
-        " values (%s, %s, 'roadmap', %s, %s) returning id",
-        (user_id, goal_id, idempotency_key, Jsonb(request)),
+        "insert into public.generation_jobs"
+        " (user_id, goal_id, item_id, job_type, idempotency_key, request)"
+        " values (%s, %s, %s, %s, %s, %s) returning id",
+        (user_id, goal_id, item_id, job_type, idempotency_key, Jsonb(request)),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -57,7 +61,7 @@ async def get(connection: UserConnection, user_id: UUID, job_id: UUID) -> Genera
 async def get_request(
     connection: UserConnection, user_id: UUID, job_id: UUID
 ) -> dict[str, Any] | None:
-    """What the learner asked for when the job was created (feedback and the base roadmap)."""
+    """What the learner asked for when the job was created (feedback, adjustment, base)."""
     cursor = await connection.execute(
         "select request from public.generation_jobs where id = %s and user_id = %s",
         (job_id, user_id),
@@ -80,9 +84,36 @@ async def find_by_idempotency_key(
 async def active_for_goal(
     connection: UserConnection, user_id: UUID, goal_id: UUID
 ) -> GenerationJob | None:
+    """The goal's roadmap job that is waiting or running, if any."""
     cursor = await connection.execute(
-        f"{_SELECT} where j.user_id = %s and j.goal_id = %s and j.status in ('queued', 'running')",
+        f"{_SELECT} where j.user_id = %s and j.goal_id = %s and j.job_type = 'roadmap'"
+        " and j.status in ('queued', 'running')",
         (user_id, goal_id),
+    )
+    row = await cursor.fetchone()
+    return GenerationJob.model_validate(row) if row else None
+
+
+async def active_for_item(
+    connection: UserConnection, user_id: UUID, item_id: UUID
+) -> GenerationJob | None:
+    """The topic's lesson job that is waiting or running, if any."""
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.item_id = %s and j.status in ('queued', 'running')",
+        (user_id, item_id),
+    )
+    row = await cursor.fetchone()
+    return GenerationJob.model_validate(row) if row else None
+
+
+async def latest_for_item(
+    connection: UserConnection, user_id: UUID, item_id: UUID
+) -> GenerationJob | None:
+    """The newest lesson job of a topic, whatever its state."""
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.item_id = %s"
+        " order by j.created_at desc, j.id desc limit 1",
+        (user_id, item_id),
     )
     row = await cursor.fetchone()
     return GenerationJob.model_validate(row) if row else None
@@ -91,20 +122,33 @@ async def active_for_goal(
 async def list_for_goal(
     connection: UserConnection, user_id: UUID, goal_id: UUID, *, limit: int
 ) -> list[GenerationJob]:
-    """Newest first."""
+    """A goal's roadmap jobs, newest first (lesson jobs are listed per topic)."""
     cursor = await connection.execute(
-        f"{_SELECT} where j.user_id = %s and j.goal_id = %s"
+        f"{_SELECT} where j.user_id = %s and j.goal_id = %s and j.job_type = 'roadmap'"
         " order by j.created_at desc, j.id desc limit %s",
         (user_id, goal_id, limit),
     )
     return [GenerationJob.model_validate(row) for row in await cursor.fetchall()]
 
 
-async def count_since(connection: UserConnection, user_id: UUID, since: datetime) -> int:
+async def count_since(
+    connection: UserConnection, user_id: UUID, since: datetime, job_type: JobType = "roadmap"
+) -> int:
     cursor = await connection.execute(
         "select count(*) as total from public.generation_jobs"
-        " where user_id = %s and created_at >= %s",
-        (user_id, since),
+        " where user_id = %s and job_type = %s and created_at >= %s",
+        (user_id, job_type, since),
+    )
+    row = await cursor.fetchone()
+    return int(row["total"]) if row else 0
+
+
+async def count_active_lessons(connection: UserConnection, user_id: UUID) -> int:
+    """Lesson jobs this learner has waiting or running right now."""
+    cursor = await connection.execute(
+        "select count(*) as total from public.generation_jobs"
+        " where user_id = %s and job_type = 'lesson' and status in ('queued', 'running')",
+        (user_id,),
     )
     row = await cursor.fetchone()
     return int(row["total"]) if row else 0

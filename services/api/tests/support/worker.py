@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from app.ai.provider import LLMProvider
 from app.core.config import AppEnv, Settings
 from app.core.db import Database
-from app.jobs.roadmap_job import WorkerEnv
+from app.jobs.runtime import WorkerEnv
 from support.database import admin, create_auth_user
 from support.plans import TODAY
 from support.rows import add_goal, add_job
@@ -88,8 +88,8 @@ def run_worker_once(dsn: str, provider: LLMProvider | None = None, **settings: A
     Uses the built-in test provider unless one is given. Returns False if nothing was queued.
     """
 
+    from app.ai.factory import builtin_responder
     from app.ai.fake import FakeProvider
-    from app.ai.fake_roadmap import roadmap_responder
     from app.jobs.worker import Worker
 
     config = worker_settings(dsn, **settings)
@@ -98,7 +98,7 @@ def run_worker_once(dsn: str, provider: LLMProvider | None = None, **settings: A
         database = Database.from_settings(config)
         await database.open(wait=True)
         try:
-            chosen = provider if provider is not None else FakeProvider(roadmap_responder)
+            chosen = provider if provider is not None else FakeProvider(builtin_responder)
             return await Worker(make_env(database, config, chosen)).run_once()
         finally:
             await database.close()

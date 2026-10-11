@@ -174,7 +174,7 @@ async function RoadmapContent({ params, searchParams }: RoadmapPageProps) {
         </Alert>
       ) : null}
 
-      <RoadmapView roadmap={roadmap} />
+      <RoadmapView roadmap={roadmap} goalId={goal.id} />
 
       <VersionHistory
         goalId={goal.id}

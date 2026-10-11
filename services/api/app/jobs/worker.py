@@ -7,7 +7,8 @@ from contextlib import suppress
 import structlog
 
 from app.jobs import queue
-from app.jobs.roadmap_job import WorkerEnv, process_job
+from app.jobs.runner import process_job
+from app.jobs.runtime import WorkerEnv
 
 log = structlog.get_logger("app.worker")
 

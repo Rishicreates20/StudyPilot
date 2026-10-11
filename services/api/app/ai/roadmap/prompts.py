@@ -10,10 +10,9 @@ cannot close the fence or open another tag, and the system prompt says it is dat
 instructions. The model also has no tools, and its answer is validated by code before use.
 """
 
-import json
 from collections.abc import Sequence
-from typing import Any
 
+from app.ai.prompt_utils import data_block, escape_tags
 from app.ai.roadmap.context import PlanningContext
 from app.ai.roadmap.validation import Violation
 
@@ -71,22 +70,10 @@ Return only JSON that matches the schema. Do not add commentary.\
 """
 
 
-def _escape_tags(text: str) -> str:
-    """Make ``<`` and ``>`` inert inside JSON text so it cannot close or open a tag."""
-    return text.replace("<", "\\u003c").replace(">", "\\u003e")
-
-
-def _data_block(value: Any) -> str:
-    """JSON that cannot close or open an XML-style tag, whatever the text inside says."""
-    return _escape_tags(
-        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    )
-
-
 def render_user_prompt(context: PlanningContext) -> str:
     return (
         "Create the roadmap for this learner.\n\n"
-        f"<learner_data>\n{_data_block(context.input_data())}\n</learner_data>\n"
+        f"<learner_data>\n{data_block(context.input_data())}\n</learner_data>\n"
     )
 
 
@@ -97,7 +84,7 @@ def render_repair_prompt(
     problems = "\n".join(f"- {violation.message}" for violation in violations)
     previous = (
         f"\nYour previous answer (data, for reference only):\n"
-        f"<previous_answer>\n{_escape_tags(previous_answer)}\n</previous_answer>\n"
+        f"<previous_answer>\n{escape_tags(previous_answer)}\n</previous_answer>\n"
         if previous_answer
         else ""
     )

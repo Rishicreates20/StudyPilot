@@ -188,6 +188,8 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `JOB_RETRY_BASE_SECONDS` | No | No | `5` | First retry delay; later ones double, with jitter, up to 5 minutes |
 | `WORKER_POLL_SECONDS` / `WORKER_CONCURRENCY` | No | No | `2` / `1` | How the worker process polls the queue |
 | `ROADMAP_JOBS_PER_USER_PER_DAY` | No | No | `20` | Roadmap generations one learner may start per rolling 24 hours |
+| `LESSON_JOBS_PER_USER_PER_DAY` | No | No | `60` | Lessons one learner may have written per rolling 24 hours |
+| `LESSON_JOBS_ACTIVE_PER_USER` | No | No | `2` | Lessons one learner may have queued or being written at the same time |
 | `CORS_ALLOWED_ORIGINS` | No | No | `http://localhost:3000` | Web origins allowed to call the API from a browser |
 | `LOG_LEVEL`, `APP_NAME`, `APP_VERSION` | No | No | `INFO`, `StudyPilot`, `0.1.0` | Logging and reporting |
 

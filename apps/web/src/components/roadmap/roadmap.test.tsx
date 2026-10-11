@@ -32,6 +32,7 @@ function job(overrides: Partial<GenerationJob> = {}): GenerationJob {
     id: JOB,
     goal_id: GOAL,
     job_type: "roadmap",
+    item_id: null,
     status: "running",
     stage: "planning",
     progress: 20,
@@ -41,6 +42,7 @@ function job(overrides: Partial<GenerationJob> = {}): GenerationJob {
     error_code: null,
     error_message: null,
     roadmap_id: null,
+    lesson_id: null,
     created_at: "2026-10-11T10:00:00Z",
     started_at: "2026-10-11T10:00:01Z",
     finished_at: null,
@@ -64,6 +66,7 @@ function summary(overrides: Partial<RoadmapSummary> = {}): RoadmapSummary {
     revision_feedback: null,
     based_on_roadmap_id: null,
     is_synthetic: false,
+    completed_topics: 0,
     created_at: "2026-10-11T09:00:00Z",
     ...overrides,
   };
@@ -82,6 +85,7 @@ function item(overrides: Partial<RoadmapItem>): RoadmapItem {
     estimated_minutes: 30,
     day_number: 1,
     prerequisite_ids: [],
+    study: { status: "not_started", has_lesson: false, sections_done: 0, sections_total: 0 },
     ...overrides,
   };
 }
@@ -433,7 +437,7 @@ describe("RegenerateDialog", () => {
 
 describe("RoadmapView", () => {
   it("presents the overview, outcome and where the content comes from", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByText("A short path through the basics.")).toBeInTheDocument();
     expect(screen.getByText(/Write small command-line tools/)).toBeInTheDocument();
@@ -441,7 +445,7 @@ describe("RoadmapView", () => {
   });
 
   it("states what could not be verified and what was assumed, separately", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByText("Please check these yourself")).toBeInTheDocument();
     expect(screen.getByText("Which edition of the book you use.")).toBeInTheDocument();
@@ -450,14 +454,14 @@ describe("RoadmapView", () => {
   });
 
   it("leaves those boxes out when there is nothing to say", () => {
-    render(<RoadmapView roadmap={roadmap({ unknowns: [], assumptions: [] })} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap({ unknowns: [], assumptions: [] })} />);
 
     expect(screen.queryByText("Please check these yourself")).not.toBeInTheDocument();
     expect(screen.queryByText("What this plan assumes")).not.toBeInTheDocument();
   });
 
   it("numbers the objectives and ties each topic to them", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByText("Explain ownership")).toBeInTheDocument();
     expect(screen.getByText(/Supports objective 1(?! ·)/)).toBeInTheDocument();
@@ -465,7 +469,7 @@ describe("RoadmapView", () => {
   });
 
   it("lists modules, topics, days, minutes and practice tasks", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByRole("heading", { name: "Module 1: Core ideas" })).toBeInTheDocument();
     const borrowing = screen.getByRole("heading", { name: "Borrowing", level: 4 }).closest("li");
@@ -476,7 +480,7 @@ describe("RoadmapView", () => {
   });
 
   it("shows revision sessions with what they revisit, and optional extras as unscheduled", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByText("Recall everything")).toBeInTheDocument();
     expect(screen.getByText("Revisits: Ownership, Borrowing")).toBeInTheDocument();
@@ -486,14 +490,14 @@ describe("RoadmapView", () => {
   });
 
   it("lays the plan out day by day", () => {
-    render(<RoadmapView roadmap={roadmap()} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap()} />);
 
     expect(screen.getByText(/Day-by-day schedule \(3 study days\)/)).toBeInTheDocument();
     expect(screen.getByText("Revise: Recall everything (20 min)")).toBeInTheDocument();
   });
 
   it("gives the headline numbers, from the server", () => {
-    render(<RoadmapView roadmap={roadmap({ target_date: "2026-12-01" })} />);
+    render(<RoadmapView goalId={GOAL} roadmap={roadmap({ target_date: "2026-12-01" })} />);
 
     expect(screen.getByText("6")).toBeInTheDocument();
     expect(screen.getByText("4 h 20 min")).toBeInTheDocument();
@@ -502,16 +506,23 @@ describe("RoadmapView", () => {
   });
 
   it("calls a test-provider plan a sample, and a real one nothing special", () => {
-    const { rerender } = render(<RoadmapView roadmap={roadmap({ is_synthetic: true })} />);
+    const { rerender } = render(
+      <RoadmapView goalId={GOAL} roadmap={roadmap({ is_synthetic: true })} />,
+    );
     expect(screen.getByText(/built-in test provider, not an AI model/)).toBeInTheDocument();
 
-    rerender(<RoadmapView roadmap={roadmap({ is_synthetic: false })} />);
+    rerender(<RoadmapView goalId={GOAL} roadmap={roadmap({ is_synthetic: false })} />);
     expect(screen.queryByText(/built-in test provider, not an AI model/)).not.toBeInTheDocument();
   });
 
   it("renders learner-written text as text, never as markup", () => {
     const hostile = '<img src=x onerror="alert(1)">';
-    render(<RoadmapView roadmap={roadmap({ overview: hostile, assumptions: [hostile] })} />);
+    render(
+      <RoadmapView
+        goalId={GOAL}
+        roadmap={roadmap({ overview: hostile, assumptions: [hostile] })}
+      />,
+    );
 
     expect(document.querySelector("img")).toBeNull();
     expect(screen.getAllByText(hostile).length).toBeGreaterThan(0);

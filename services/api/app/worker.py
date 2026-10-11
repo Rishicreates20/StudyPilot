@@ -25,7 +25,7 @@ from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.core.config import EX_CONFIG, Settings, load_settings_or_exit
 from app.core.db import Database
 from app.core.logging import configure_logging
-from app.jobs.roadmap_job import WorkerEnv
+from app.jobs.runtime import WorkerEnv
 from app.jobs.worker import Worker
 
 log = structlog.get_logger("app.worker")

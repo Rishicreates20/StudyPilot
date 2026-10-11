@@ -42,3 +42,23 @@ def errors_by_field(response_json: dict[str, Any]) -> dict[str, str]:
         field = error["field"].removeprefix("body.").split(".")[0]
         fields.setdefault(field, error["message"])
     return fields
+
+
+def generate_roadmap(api: TestClient, dsn: str, learner: Learner, goal_id: str) -> dict[str, Any]:
+    """Generate a roadmap for ``goal_id`` with the real worker and return the stored roadmap."""
+    from support.worker import clear_queue, run_worker_once
+
+    clear_queue(dsn)  # leftovers from other tests must not be picked up instead of this job
+    started = api.post(f"/v1/goals/{goal_id}/roadmaps", headers=learner.headers, json={})
+    assert started.status_code == 202, started.text
+    assert run_worker_once(dsn) is True
+    job = api.get(f"/v1/jobs/{started.json()['id']}", headers=learner.headers).json()
+    assert job["status"] == "completed", job
+    roadmap = api.get(f"/v1/roadmaps/{job['roadmap_id']}", headers=learner.headers)
+    assert roadmap.status_code == 200, roadmap.text
+    return roadmap.json()
+
+
+def topic_ids(roadmap: dict[str, Any]) -> list[str]:
+    """The ids of a roadmap's topics, in study order."""
+    return [topic["id"] for module in roadmap["modules"] for topic in module["topics"]]

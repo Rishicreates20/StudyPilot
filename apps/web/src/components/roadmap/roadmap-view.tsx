@@ -1,4 +1,5 @@
 import {
+  ArrowRightIcon,
   CalendarDaysIcon,
   CircleAlertIcon,
   ClockIcon,
@@ -8,14 +9,20 @@ import {
   TargetIcon,
   TimerIcon,
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { StatCard } from "@/components/goals/stat-card";
+import { ProgressBar } from "@/components/progress/progress-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Roadmap, RoadmapItem } from "@/lib/api/server";
 import { formatDate } from "@/lib/format";
+import { studyActionLabel, studySummary } from "@/lib/lessons/labels";
+import { studyPath } from "@/lib/lessons/paths";
+import { continueTarget } from "@/lib/lessons/state";
 import { formatMinutes, pluralize, syllabusBasisNote } from "@/lib/roadmaps/labels";
 import { allTopics, prerequisiteTitles, scheduleByDay } from "@/lib/roadmaps/schedule";
 
@@ -23,11 +30,12 @@ import { allTopics, prerequisiteTitles, scheduleByDay } from "@/lib/roadmaps/sch
  * A stored roadmap, read-only. Every number shown (topics, minutes, days) was computed by the
  * server from the stored items; nothing here is the model's own claim about its plan.
  */
-export function RoadmapView({ roadmap }: { roadmap: Roadmap }) {
+export function RoadmapView({ roadmap, goalId }: { roadmap: Roadmap; goalId: string }) {
   const topics = allTopics(roadmap);
   const everyItem: RoadmapItem[] = [...topics, ...roadmap.revision_sessions];
   const objectiveNumber = new Map(roadmap.objectives.map((o, index) => [o.id, index + 1]));
   const days = scheduleByDay(roadmap);
+  const resume = continueTarget(topics);
 
   return (
     <div className="space-y-10">
@@ -80,6 +88,31 @@ export function RoadmapView({ roadmap }: { roadmap: Roadmap }) {
           value={`${roadmap.daily_minutes} min / day`}
           icon={TimerIcon}
         />
+      </section>
+
+      <section aria-labelledby="progress-heading" className="space-y-3">
+        <h2 id="progress-heading" className="font-heading text-xl font-semibold tracking-tight">
+          Your progress
+        </h2>
+        <ProgressBar
+          label="Topics finished"
+          value={roadmap.completed_topics}
+          max={roadmap.topic_count}
+          description={`${roadmap.completed_topics} of ${roadmap.topic_count} topics finished`}
+        />
+        {resume ? (
+          <Button asChild>
+            <Link href={studyPath(goalId, resume.id)}>
+              {resume.study.status === "in_progress" ? "Continue studying" : "Start studying"}:{" "}
+              {resume.title}
+              <ArrowRightIcon aria-hidden="true" />
+            </Link>
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Every topic is finished. You can open any of them again to review.
+          </p>
+        )}
       </section>
 
       {roadmap.unknowns.length > 0 ? (
@@ -151,6 +184,7 @@ export function RoadmapView({ roadmap }: { roadmap: Roadmap }) {
                 {module.topics.map((topic) => (
                   <ItemCard
                     key={topic.id}
+                    goalId={goalId}
                     item={topic}
                     footer={footerFor(topic, everyItem, objectiveNumber)}
                   />
@@ -170,6 +204,7 @@ export function RoadmapView({ roadmap }: { roadmap: Roadmap }) {
             {roadmap.revision_sessions.map((session) => (
               <ItemCard
                 key={session.id}
+                goalId={goalId}
                 item={session}
                 footer={
                   session.prerequisite_ids.length > 0
@@ -192,7 +227,7 @@ export function RoadmapView({ roadmap }: { roadmap: Roadmap }) {
           </p>
           <ul className="space-y-3">
             {roadmap.enrichment.map((extra) => (
-              <ItemCard key={extra.id} item={extra} footer={null} />
+              <ItemCard key={extra.id} goalId={goalId} item={extra} footer={null} />
             ))}
           </ul>
         </section>
@@ -249,7 +284,16 @@ function footerFor(
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-function ItemCard({ item, footer }: { item: RoadmapItem; footer: ReactNode }) {
+function ItemCard({
+  goalId,
+  item,
+  footer,
+}: {
+  goalId: string;
+  item: RoadmapItem;
+  footer: ReactNode;
+}) {
+  const lessonable = item.kind !== "revision";
   return (
     <li className="space-y-2 rounded-lg border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -271,6 +315,21 @@ function ItemCard({ item, footer }: { item: RoadmapItem; footer: ReactNode }) {
         </p>
       ) : null}
       {footer ? <p className="text-xs text-muted-foreground">{footer}</p> : null}
+      {lessonable ? (
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <Button
+            asChild
+            size="sm"
+            variant={item.study.status === "in_progress" ? "default" : "outline"}
+          >
+            <Link href={studyPath(goalId, item.id)}>
+              {studyActionLabel(item.study)}
+              <span className="sr-only">: {item.title}</span>
+            </Link>
+          </Button>
+          <span className="text-xs text-muted-foreground">{studySummary(item.study)}</span>
+        </div>
+      ) : null}
     </li>
   );
 }

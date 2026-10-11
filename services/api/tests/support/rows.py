@@ -129,6 +129,7 @@ def add_item(
     key: str | None = None,
     day: int | None = 1,
     minutes: int = 30,
+    title: str = "An item",
 ) -> uuid.UUID:
     return _insert(
         dsn,
@@ -140,10 +141,51 @@ def add_item(
             "kind": kind,
             "position": position,
             "item_key": key if key is not None else f"item-{position}",
-            "title": "An item",
+            "title": title,
             "description": "Described",
             "practice_task": "Practise it" if kind == "topic" else None,
             "estimated_minutes": minutes,
             "day_number": day,
+        },
+    )
+
+
+def add_lesson(
+    dsn: str,
+    user_id: uuid.UUID,
+    roadmap_id: uuid.UUID,
+    item_id: uuid.UUID,
+    job_id: uuid.UUID,
+    *,
+    version: int = 1,
+    status: str = "current",
+    section_ids: list[str] | None = None,
+    **fields: Any,
+) -> uuid.UUID:
+    """A stored lesson whose content is the built-in sample (a real, valid document)."""
+    from psycopg.types.json import Jsonb
+
+    from support.lessons import valid_lesson
+
+    lesson = valid_lesson()
+    return _insert(
+        dsn,
+        "lessons",
+        {
+            "user_id": user_id,
+            "roadmap_id": roadmap_id,
+            "item_id": item_id,
+            "job_id": job_id,
+            "version": version,
+            "status": status,
+            "title": lesson.title,
+            "language": lesson.language,
+            "content": Jsonb(lesson.model_dump(mode="json")),
+            "content_version": 1,
+            "section_ids": section_ids if section_ids is not None else lesson.section_ids(),
+            "prompt_version": "test/v1",
+            "provider": "fake",
+            "model_id": "fake-1",
+            **fields,
         },
     )

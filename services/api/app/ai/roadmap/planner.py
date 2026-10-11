@@ -7,18 +7,12 @@ returned, and there is no loop that could spend without bound.
 """
 
 import json
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import structlog
 
-from app.ai.provider import (
-    LLMError,
-    LLMInvalidOutput,
-    LLMProvider,
-    StructuredRequest,
-    StructuredResult,
-)
+from app.ai.calls import Observer, call_structured
+from app.ai.provider import LLMInvalidOutput, LLMProvider, StructuredRequest, StructuredResult
 from app.ai.roadmap.context import PlanningContext
 from app.ai.roadmap.prompts import (
     PROMPT_VERSION,
@@ -54,21 +48,6 @@ class PlanInvalid(Exception):
 
 
 @dataclass(frozen=True)
-class CallRecord:
-    """One model call, for the usage ledger. Success and failure are both recorded."""
-
-    purpose: str
-    provider: str
-    model_id: str
-    prompt_version: str
-    input_tokens: int | None
-    output_tokens: int | None
-    latency_ms: int
-    finish_reason: str
-    error_code: str | None = None
-
-
-@dataclass(frozen=True)
 class PlanOutcome:
     plan: PlannedRoadmap
     metrics: PlanMetrics
@@ -77,9 +56,6 @@ class PlanOutcome:
     model_id: str
     synthetic: bool
     repaired: bool
-
-
-Observer = Callable[[CallRecord], Awaitable[None]]
 
 
 async def plan_roadmap(
@@ -95,7 +71,7 @@ async def plan_roadmap(
     violations: list[Violation]
     previous_answer: str | None = None
     try:
-        first = await _call(provider, request, observer)
+        first = await call_structured(provider, request, PlannedRoadmap, observer)
     except LLMInvalidOutput as exc:
         violations = [Violation("SCHEMA", problem) for problem in exc.problems] or [
             Violation("SCHEMA", "The answer did not match the required JSON structure.")
@@ -116,7 +92,7 @@ async def plan_roadmap(
         input_data=context.input_data(),
     )
     try:
-        second = await _call(provider, repair, observer)
+        second = await call_structured(provider, repair, PlannedRoadmap, observer)
     except LLMInvalidOutput as exc:
         raise PlanInvalid(
             [Violation("SCHEMA", problem) for problem in exc.problems]
@@ -127,43 +103,6 @@ async def plan_roadmap(
     if remaining:
         raise PlanInvalid(remaining)
     return _outcome(repaired, second, repaired=True)
-
-
-async def _call(
-    provider: LLMProvider, request: StructuredRequest, observer: Observer | None
-) -> StructuredResult[PlannedRoadmap]:
-    try:
-        result = await provider.generate_structured(request, PlannedRoadmap)
-    except LLMError as exc:
-        if observer is not None:
-            await observer(
-                CallRecord(
-                    purpose=request.purpose,
-                    provider=provider.name,
-                    model_id="",
-                    prompt_version=request.prompt_version,
-                    input_tokens=None,
-                    output_tokens=None,
-                    latency_ms=0,
-                    finish_reason="",
-                    error_code=exc.code,
-                )
-            )
-        raise
-    if observer is not None:
-        await observer(
-            CallRecord(
-                purpose=request.purpose,
-                provider=result.provider,
-                model_id=result.model_id,
-                prompt_version=request.prompt_version,
-                input_tokens=result.usage.input_tokens,
-                output_tokens=result.usage.output_tokens,
-                latency_ms=result.latency_ms,
-                finish_reason=result.finish_reason,
-            )
-        )
-    return result
 
 
 def _outcome(

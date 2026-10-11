@@ -14,17 +14,12 @@ from dataclasses import dataclass
 
 from app.ai.roadmap.context import PlanningContext
 from app.ai.roadmap.schema import MAX_TOPICS, PlannedRoadmap, PlanRevision, PlanTopic
+from app.ai.violations import Violation
 
 _KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _MAX_REPORTED = 25
 _MAX_DAYS_LISTED = 6
 _EXAM_LIKE = frozenset({"exam", "certification"})
-
-
-@dataclass(frozen=True)
-class Violation:
-    code: str
-    message: str
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import goals, me, roadmaps
+from app.api.v1 import goals, lessons, me, roadmaps
 from app.core.errors import ProblemDetail
 from app.core.security import get_principal
 
@@ -17,3 +17,4 @@ router = APIRouter(
 router.include_router(me.router)
 router.include_router(goals.router)
 router.include_router(roadmaps.router)
+router.include_router(lessons.router)

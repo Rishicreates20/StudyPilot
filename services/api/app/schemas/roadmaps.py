@@ -12,9 +12,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.ai.roadmap.schema import SyllabusBasis
+from app.schemas.lessons import ItemStudy
 
-JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
-JobType = Literal["roadmap"]
 RoadmapStatus = Literal["current", "superseded"]
 ItemKind = Literal["topic", "revision", "enrichment"]
 
@@ -41,34 +40,6 @@ class RoadmapRequest(BaseModel):
         return value or None
 
 
-class GenerationJob(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    goal_id: UUID
-    job_type: JobType
-    status: JobStatus
-    # Where the job is: queued, starting, loading, planning, validated, saving, waiting_retry,
-    # done, failed, cancelled. For display only; branch on `status`.
-    stage: str
-    progress: int = Field(ge=0, le=100)
-    attempts: int
-    max_attempts: int
-    cancel_requested: bool
-    error_code: str | None
-    # Safe to show a learner. Present on failed jobs, and on queued ones waiting for a retry.
-    error_message: str | None
-    # The roadmap this job produced, once it has completed.
-    roadmap_id: UUID | None
-    created_at: datetime
-    started_at: datetime | None
-    finished_at: datetime | None
-
-
-class JobList(BaseModel):
-    items: list[GenerationJob]
-
-
 class Objective(BaseModel):
     id: str
     text: str
@@ -90,6 +61,8 @@ class RoadmapItem(BaseModel):
     day_number: int | None
     # Items that come first: earlier topics for a topic, the topics revisited for a revision.
     prerequisite_ids: list[UUID]
+    # How far the learner has got with this item's lesson. Revision sessions have no lesson.
+    study: ItemStudy
 
 
 class RoadmapModule(BaseModel):
@@ -120,6 +93,8 @@ class RoadmapSummary(BaseModel):
     based_on_roadmap_id: UUID | None
     # True when a test double, not an AI model, produced the content. Show it as a sample.
     is_synthetic: bool
+    # Topics (not revision sessions or extras) whose lesson the learner has finished.
+    completed_topics: int
     created_at: datetime
 
 

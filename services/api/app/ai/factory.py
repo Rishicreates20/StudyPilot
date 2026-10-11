@@ -2,11 +2,19 @@
 
 import httpx2
 
-from app.ai.fake import FakeProvider
+from app.ai.fake import FakeProvider, Reply
+from app.ai.fake_lesson import lesson_responder
 from app.ai.fake_roadmap import roadmap_responder
 from app.ai.gemini import GeminiProvider
-from app.ai.provider import LLMNotConfigured, LLMProvider
+from app.ai.provider import LLMNotConfigured, LLMProvider, StructuredRequest
 from app.core.config import LlmProviderName, Settings
+
+
+def builtin_responder(request: StructuredRequest) -> Reply:
+    """The test double's answer, chosen by what the call is for (``lesson.*`` or ``roadmap.*``)."""
+    if request.purpose.startswith("lesson."):
+        return lesson_responder(request)
+    return roadmap_responder(request)
 
 
 def build_provider(settings: Settings, client: httpx2.AsyncClient) -> LLMProvider:
@@ -24,5 +32,5 @@ def build_provider(settings: Settings, client: httpx2.AsyncClient) -> LLMProvide
             timeout_seconds=settings.llm_timeout_seconds,
         )
     if settings.llm_provider is LlmProviderName.FAKE:
-        return FakeProvider(roadmap_responder)
+        return FakeProvider(builtin_responder)
     raise LLMNotConfigured("LLM_PROVIDER is not set")

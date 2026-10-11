@@ -20,6 +20,7 @@ function job(overrides: Partial<GenerationJob> = {}): GenerationJob {
     id: "22222222-2222-4222-8222-222222222222",
     goal_id: GOAL,
     job_type: "roadmap",
+    item_id: null,
     status: "queued",
     stage: "queued",
     progress: 0,
@@ -29,6 +30,7 @@ function job(overrides: Partial<GenerationJob> = {}): GenerationJob {
     error_code: null,
     error_message: null,
     roadmap_id: null,
+    lesson_id: null,
     created_at: "2026-10-11T10:00:00Z",
     started_at: null,
     finished_at: null,
@@ -52,6 +54,7 @@ function version(overrides: Partial<RoadmapSummary> = {}): RoadmapSummary {
     revision_feedback: null,
     based_on_roadmap_id: null,
     is_synthetic: false,
+    completed_topics: 0,
     created_at: "2026-10-11T09:00:00Z",
     ...overrides,
   };
@@ -70,6 +73,7 @@ function item(overrides: Partial<RoadmapItem>): RoadmapItem {
     estimated_minutes: 30,
     day_number: 1,
     prerequisite_ids: [],
+    study: { status: "not_started", has_lesson: false, sections_done: 0, sections_total: 0 },
     ...overrides,
   };
 }

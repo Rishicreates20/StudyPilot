@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { SubmitButton } from "@/components/forms/submit-button";
+import { ProgressBar } from "@/components/progress/progress-bar";
 import { GenerationStatus } from "@/components/roadmap/generation-status";
 import { RegenerateDialog } from "@/components/roadmap/regenerate-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -113,10 +114,18 @@ export function RoadmapPanel({ goalId, goalStatus, state, timeZone }: RoadmapPan
                 </dd>
               </div>
             </dl>
+            <ProgressBar
+              label="Topics finished"
+              value={state.current.completed_topics}
+              max={state.current.topic_count}
+              description={`${state.current.completed_topics} of ${state.current.topic_count} topics finished`}
+            />
             <div className="flex flex-wrap gap-2">
               <Button asChild>
                 <Link href={roadmapPath(goalId)}>
-                  View roadmap
+                  {!archived && state.current.completed_topics > 0
+                    ? "Continue studying"
+                    : "View roadmap"}
                   <ArrowRightIcon aria-hidden="true" />
                 </Link>
               </Button>

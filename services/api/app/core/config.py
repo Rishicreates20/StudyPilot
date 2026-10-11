@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     max_active_goals_per_user: int = Field(default=50, ge=1, le=1000)
     # Roadmap generations a learner may start per rolling 24 hours (a guard against runaway cost).
     roadmap_jobs_per_user_per_day: int = Field(default=20, ge=1, le=1000)
+    # Lessons a learner may have written per rolling 24 hours, and how many may be in progress at
+    # once (each is a model call; a learner reading one topic rarely needs more than two waiting).
+    lesson_jobs_per_user_per_day: int = Field(default=60, ge=1, le=2000)
+    lesson_jobs_active_per_user: int = Field(default=2, ge=1, le=10)
 
     # --- AI provider (used by the worker; the API only checks that it is configured) -----------
     llm_provider: LlmProviderName | None = None
