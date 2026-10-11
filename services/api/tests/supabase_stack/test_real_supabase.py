@@ -41,6 +41,7 @@ from pydantic import SecretStr
 from app.core.config import AppEnv, JwtMode, LlmProviderName, Settings
 from app.main import create_app
 from conftest import new_client
+from support.api_helpers import topic_ids
 from support.settings import IsolatedSettings
 from support.worker import clear_queue, run_worker_once
 
@@ -772,7 +773,7 @@ def quiz_for_a_new_topic(api: TestClient, account: Account) -> tuple[str, str, s
         f"/v1/roadmaps/{generate_roadmap(api, account, goal['id'])['roadmap_id']}",
         headers=account.headers,
     ).json()
-    topic = roadmap["modules"][0]["items"][0]["id"]
+    topic = topic_ids(roadmap)[0]
     clear_queue(DB_URL)
     finish_job(
         api,
