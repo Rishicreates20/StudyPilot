@@ -729,3 +729,20 @@ def test_a_queued_job_can_be_cancelled_under_the_real_roles(
         api.post(f"/v1/goals/{goal['id']}/roadmaps", headers=ada.headers, json={}).status_code
         == 202
     )
+
+
+def test_no_security_definer_function_in_public_is_callable_by_clients_on_real_supabase(
+    database: psycopg.Connection[DictRow],
+) -> None:
+    """Supabase's default privileges grant execute on new `public` functions to the browser-facing
+    roles. A SECURITY DEFINER function that keeps that grant is a door around row security (the
+    platform's own `rls_auto_enable()` was one on hosted projects until a migration revoked it)."""
+    leaks = database.execute(
+        "select p.oid::regprocedure::text as function_name"
+        " from pg_proc p join pg_namespace n on n.oid = p.pronamespace"
+        " where n.nspname = 'public' and p.prosecdef"
+        " and (has_function_privilege('anon', p.oid, 'execute')"
+        " or has_function_privilege('authenticated', p.oid, 'execute'))"
+    ).fetchall()
+
+    assert leaks == [], f"callable by anon/authenticated: {[row['function_name'] for row in leaks]}"

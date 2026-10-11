@@ -64,3 +64,71 @@ def test_the_signup_trigger_function_is_not_callable_by_clients(database_dsn: st
     )
 
     assert row == {"authenticated_can": False, "anon_can": False}
+
+
+SECURITY_DEFINER_CALLABLE_BY_CLIENTS = """
+    select p.oid::regprocedure::text as function_name
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prosecdef
+      and (has_function_privilege('anon', p.oid, 'execute')
+           or has_function_privilege('authenticated', p.oid, 'execute'))
+    order by 1
+"""
+
+
+def test_no_security_definer_function_in_public_can_be_called_by_clients(
+    database_dsn: str,
+) -> None:
+    """A SECURITY DEFINER function runs with its owner's rights. Every one that lives in `public`
+    must be unreachable from the browser-facing roles, or it becomes a door around row security."""
+    leaks = admin(database_dsn).fetchall(SECURITY_DEFINER_CALLABLE_BY_CLIENTS)
+
+    assert leaks == [], f"callable by anon/authenticated: {[row['function_name'] for row in leaks]}"
+
+
+def test_the_platform_helper_is_locked_when_a_hosted_project_has_it(database_dsn: str) -> None:
+    """Hosted Supabase projects carry `public.rls_auto_enable()`; the migration revokes it there."""
+    from support.database import MIGRATIONS_DIR
+
+    migration = (MIGRATIONS_DIR / "20261011150000_lock_down_platform_helper.sql").read_text(
+        encoding="utf-8"
+    )
+    database = admin(database_dsn)
+    database.execute(
+        "create function public.rls_auto_enable() returns event_trigger"
+        " language plpgsql security definer as $$ begin null; end $$"
+    )
+    try:
+        before = database.fetchone(
+            "select has_function_privilege('anon', 'public.rls_auto_enable()', 'execute')"
+            " as anon,"
+            " has_function_privilege('authenticated', 'public.rls_auto_enable()', 'execute')"
+            " as auth"
+        )
+        assert before == {"anon": True, "auth": True}, "the stub's default privileges should apply"
+
+        database.run_script(migration)
+        database.run_script(migration)  # running it twice changes nothing
+
+        after = database.fetchone(
+            "select has_function_privilege('anon', 'public.rls_auto_enable()', 'execute')"
+            " as anon,"
+            " has_function_privilege('authenticated', 'public.rls_auto_enable()', 'execute')"
+            " as auth"
+        )
+        assert after == {"anon": False, "auth": False}
+        assert database.fetchall(SECURITY_DEFINER_CALLABLE_BY_CLIENTS) == []
+    finally:
+        database.execute("drop function public.rls_auto_enable()")
+
+
+def test_the_platform_helper_migration_is_harmless_where_the_helper_does_not_exist(
+    database_dsn: str,
+) -> None:
+    from support.database import MIGRATIONS_DIR
+
+    migration = (MIGRATIONS_DIR / "20261011150000_lock_down_platform_helper.sql").read_text(
+        encoding="utf-8"
+    )
+
+    admin(database_dsn).run_script(migration)  # no error, nothing to revoke
