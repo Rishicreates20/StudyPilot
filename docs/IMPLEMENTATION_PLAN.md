@@ -2,11 +2,12 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.1 — planning complete, implementation not started |
-| **Date** | 2026-10-09 |
+| **Status** | Living plan — Milestone 1 and the product part of Milestone 2 are implemented; no AI feature exists yet |
+| **Date** | Written 2026-10-09 · last updated 2026-10-11 |
 | **Related** | [PRD.md](PRD.md) · [ARCHITECTURE.md](ARCHITECTURE.md) |
 
-**Next action: Milestone 1 — Foundation + the Goals vertical slice** (§4).
+**Done:** M1 (foundation, Supabase auth and database, protected goals API, sign-up/sign-in/dashboard) and the product half of M2 (onboarding, goal management, settings; §4.5).
+**Next action:** the *deployment* half of M2 (Vercel, Render, a staging Supabase project; needs accounts from the owner), then **Milestone 3 — job queue and AI foundation** (§5). Do not start AI generation before that.
 
 ---
 
@@ -56,7 +57,7 @@ Everything application-level: monorepo, API, web app, migrations, CI, containers
 | M | Name | Delivers | Needs from the account owner | Gate |
 |---|---|---|---|---|
 | **M1** | Foundation + Goals slice | Monorepo, health endpoints, CI, migrations + RLS tests, Supabase Auth, goal create/list/view, dashboard | Supabase dev project | — |
-| **M2** | Goal management, onboarding, first deploy | Edit/pause/complete/archive, profile settings, onboarding wizard, responsive app shell, **walking-skeleton deployment** | Vercel, Render, Supabase staging | — |
+| **M2** | Goal management, onboarding, first deploy | Edit/pause/complete/archive, profile settings, onboarding wizard, responsive app shell ✅ · **walking-skeleton deployment** ⬜ | Vercel, Render, Supabase staging | — |
 | **M3** | Job queue, AI foundation, roadmaps | Durable queue + worker, `LLMProvider`, intent parser + planner, programmatic plan validation, budgets + usage ledger, job-progress UI, roadmap overview | LLM API key; confirm provider (A4) | — |
 | **M4** | Lessons and study workspace | Structured lessons per item, workspace UI, simple-explanation toggle, progress, resume | — | — |
 | **M5** | Quizzes, mastery, next action | Question generation, server-side grading, answer-key isolation, mastery, weak-topic flags, next-action | — | **Private alpha** |
@@ -97,20 +98,20 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 
 *Status notes (what is and is not verified):* `npm run check` passes locally (formatting, lint, types and tests for web and API). Both apps were started and their health endpoints and pages exercised in a browser. **Not verified locally:** Docker builds and Compose (no Docker on the dev machine) and the GitHub Actions workflow (YAML parses, but it has not run). Both are exercised by CI on the first push.
 
-*Exit check:* one command runs lint + type-check + unit tests for both apps and passes ✅; both health endpoints respond ✅; no secret is tracked ✅; CI green on `main` ⏳ (pending first run).
+*Exit check:* one command runs lint + type-check + unit tests for both apps and passes ✅; both health endpoints respond ✅; no secret is tracked ✅; CI green on `main` ✅ (run 38053557495, commit 301c86e: secret scan, API, web, Supabase stack and Docker jobs all passed).
 
 **M1b — Data and API slice** *(commit boundary 2)* — **implemented; see status notes**
 
 - [x] **Time-boxed spikes** (outcomes in the ARCHITECTURE decision log):
-  - **S1** — role switching and claims inside a request transaction: verified on PostgreSQL 16 through psycopg 3 and a pool (ADR-006, ADR-021). Under Supabase's own roles: ⏳ CI job `supabase-stack`.
-  - **S2** — JWT verification: both modes implemented with per-mode algorithm allow-lists and tested with real signatures; Supabase's docs checked on 2026-10-10. Which algorithm the local stack issues is detected in CI, not assumed. Genuine Supabase tokens: ⏳ CI.
-  - **S3** — Next.js 16 uses `proxy.ts`; `@supabase/ssr` sessions are refreshed there with `getClaims()`. Verified by unit tests; the real refresh is exercised by the Playwright journey ⏳ CI.
+  - **S1** — role switching and claims inside a request transaction: verified on PostgreSQL 16 through psycopg 3 and a pool (ADR-006, ADR-021). Under Supabase's own roles: ✅ the CI job `supabase-stack` passed (run 38053557495).
+  - **S2** — JWT verification: both modes implemented with per-mode algorithm allow-lists and tested with real signatures; Supabase's docs checked on 2026-10-10. Which algorithm the local stack issues is detected in CI, not assumed. Genuine Supabase tokens: ✅ the same CI run.
+  - **S3** — Next.js 16 uses `proxy.ts`; `@supabase/ssr` sessions are refreshed there with `getClaims()`. Verified by unit tests, and the real refresh by the Playwright journey in that CI run ✅.
   - **S4** — toolchain pinned in M1a (TypeScript 6.0.3, Next 16.4, `typescript-eslint` 8.71).
 - [x] Migrations `20261009130000_profiles.sql` (extensions-free; `set_updated_at()`, `profiles`, `handle_new_user` trigger with backfill, RLS, explicit grants) and `20261009130100_learning_goals.sql` (check constraints, index, RLS, column-level grants, per-user ownership key).
 - [x] Database tests (pytest on a real PostgreSQL 16 instead of pgTAP, ADR-022): owner can read and write only their own rows; another user cannot; `anon` has no access; constraints reject invalid rows; profile created on sign-up; guards that fail the build if a `public` table lacks RLS.
 - [x] API: Pydantic schemas, psycopg repositories, services, routers (`/v1/me`, `/v1/goals`), `user_transaction`, cursor pagination, 404 on non-owned resources, per-user goal cap.
 - [x] Tests: settings validation; JWT (valid, missing, malformed, expired, wrong audience/issuer/algorithm, bad signature, anonymous, non-UUID subject); JWKS cache behaviour; authorization (user B gets 404 on user A's goal); validation errors; pool isolation; failure handling. **250 pass, 1 skipped** (the genuine-stack module). No schema drift test: there are no ORM models (ADR-021).
-- [x] OpenAPI export → `packages/contracts` (generated types) → `npm run contracts:check`; regeneration is deterministic. The CI step is wired ⏳ unobserved.
+- [x] OpenAPI export → `packages/contracts` (generated types) → `npm run contracts:check`; regeneration is deterministic. The CI step passed in run 38053557495 ✅.
 
 **M1c — Web slice** *(commit boundary 3)* — **implemented; see status notes**
 
@@ -118,38 +119,53 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 - [x] Dashboard: goals from the API with skeleton, empty state, and error state with retry; session-ended handling that cannot loop (ADR-024).
 - [x] Create-goal form (native form + Server Action + Zod, not React Hook Form) showing server-side field errors; success returns to the dashboard with the new goal visible.
 - [x] Vitest tests (283): redirect safety, schemas, messages, auth and goal Server Actions with only Supabase and the API mocked, the typed API client, the proxy and cookie hardening, the confirm route.
-- [x] Playwright journey written (`apps/web/e2e`): sign up → create goal → reload → HttpOnly cookie check → sign out → blocked → sign in → **second user sees nothing**. ⏳ Not yet run anywhere: it needs the Supabase stack, which only CI can start.
+- [x] Playwright journey (`apps/web/e2e`): sign up → create goal → reload → HttpOnly cookie check → sign out → blocked → sign in → **second user sees nothing**. Passed against a genuine Supabase stack in CI run 38053557495 ✅. (Superseded by the longer journey in §4.5.)
 
 **M1d — Review and documentation** *(commit boundary 4)*
 
 - [x] Security pass. Ownership paths, grants and error bodies are covered by tests. **Bundle search (2026-10-10):** the web app was built with canary values for `DATABASE_URL`, the JWT secret, a service-role key and a secret key in its environment; none appears anywhere in the 422 files of `.next`, there are no JWT-shaped strings, and the browser bundle contains no Supabase client code and not even the publishable key (auth runs on the server). The only `sb_secret_` matches are the Supabase library's own key-prefix checks. Not done: a dependency-level review beyond `npm audit`.
-- [ ] Accessibility pass (keyboard, focus, contrast) and a mobile-width pass on the new pages.
+- [x] Accessibility pass (keyboard, focus, contrast) and a mobile-width pass on the new pages — done for every signed-in page in M2 (§4.5).
 - [x] README, ARCHITECTURE (ADR-021…024, S1–S3 outcomes, ADR-006 status), `.env.example` files, `docs/SUPABASE_SETUP.md` and the configuration reference updated to match what exists.
 
-*Status notes (what is and is not verified):* Run locally and observed: web typecheck, lint, formatting and 283 Vitest tests; production web build; API 250 pytest tests against a real PostgreSQL 16 and strict pyright with 0 errors; contract regeneration is byte-identical. **Not verified locally** (no Docker, and no Supabase project is connected to this repository): sign-up, sign-in, session persistence and sign-out against genuine Supabase Auth; Supabase's real roles and `auth` schema; the Playwright journey; the Docker images; the GitHub Actions workflow. Those are what the `supabase-stack` and `docker` jobs exist to prove, and they stay ⏳ until a run is observed.
+*Status notes (what is and is not verified):* Run locally and observed: web typecheck, lint, formatting and 283 Vitest tests; production web build; API 250 pytest tests against a real PostgreSQL 16 and strict pyright with 0 errors; contract regeneration is byte-identical. Not runnable locally (no Docker, no Supabase project connected): genuine Supabase Auth, Supabase's real roles and `auth` schema, the Docker images. **Observed in CI** (run 38053557495 on commit 301c86e): all five jobs green — secret scan, API, web, the `supabase-stack` job (genuine tokens, real roles, the Playwright journey) and Docker.
 
 ### 4.4 Acceptance criteria
 
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
-| 1 | A new user can sign up and sign in; an unauthenticated call to a protected route returns **401** | 401 matrix in API tests; real sign-up/sign-in in the stack job and Playwright | 401 ✅ · sign-up/sign-in ⏳ CI |
+| 1 | A new user can sign up and sign in; an unauthenticated call to a protected route returns **401** | 401 matrix in API tests; real sign-up/sign-in in the stack job and Playwright | 401 ✅ · sign-up/sign-in ✅ CI (run 38053557495) |
 | 2 | Creating a goal persists a row with `user_id` = the caller | API and database tests on real PostgreSQL | ✅ |
-| 3 | The goal appears on the dashboard and survives a reload | Playwright | ⏳ CI |
-| 4 | User B gets **404** for user A's goal; a database session acting as B cannot select A's rows | API and database tests; the same under Supabase's roles in the stack job | Real PostgreSQL ✅ · Supabase roles ⏳ CI |
-| 5 | `anon` has no table access to application tables | Guard tests; stack job | ✅ locally · stack ⏳ CI |
+| 3 | The goal appears on the dashboard and survives a reload | Playwright | ✅ CI (run 38053557495) |
+| 4 | User B gets **404** for user A's goal; a database session acting as B cannot select A's rows | API and database tests; the same under Supabase's roles in the stack job | Real PostgreSQL ✅ · Supabase roles ✅ CI |
+| 5 | `anon` has no table access to application tables | Guard tests; stack job | ✅ locally · stack ✅ CI |
 | 6 | Invalid input produces field-level errors in the UI and a problem+json 422 | Web action and schema tests; API validation tests | ✅ |
-| 7 | The dashboard shows skeleton, empty and error-with-retry states | Implemented; empty state exercised by the Playwright journey; the feedback, load-error and goal components have unit tests; the dashboard page itself has none | ◐ partly tested |
+| 7 | The dashboard shows skeleton, empty and error-with-retry states | Implemented; empty and populated states exercised by the Playwright journey; the feedback, load-error and goal components have unit tests; the dashboard page itself has no unit test | ✅ (page covered by the browser journey) |
 | 8 | Missing or invalid environment variables stop the API at startup without echoing secrets | Settings tests | ✅ |
 | 9 | `/healthz` and `/readyz` behave correctly (readiness fails when the database is unreachable) | Health and failure tests | ✅ |
-| 10 | The generated API client is in sync with the OpenAPI document (CI-enforced) | Deterministic regeneration observed locally; CI step wired | ✅ locally · CI ⏳ (no drift test: no ORM models) |
-| 11 | Lint, type-check, unit, integration and E2E suites pass **in CI**, outputs read | — | ⏳ pending the first run with these changes |
+| 10 | The generated API client is in sync with the OpenAPI document (CI-enforced) | Deterministic regeneration observed locally; CI step passed | ✅ locally · ✅ CI (no drift test: no ORM models) |
+| 11 | Lint, type-check, unit, integration and E2E suites pass **in CI**, outputs read | CI run 38053557495 | ✅ for commit 301c86e · re-check after the M2 push (§4.5) |
 | 12 | A new contributor can follow the README to a running app | `docs/SUPABASE_SETUP.md` written from Supabase's current docs | ⏳ not yet followed by someone fresh |
+
+### 4.5 Milestone 2, product half — onboarding, goal management, settings
+
+**Outcome:** a new user signs up, answers three optional onboarding steps, creates a goal, sees it on the dashboard, edits it, pauses/completes/archives it, and finds every change after a refresh. Nobody can read, change or delete another user's goal.
+
+- [x] **Migration `20261010100000_goal_lifecycle_and_preferences.sql`:** `learning_goals` gains `learning_preferences`, `completed_at` and `archived_at`; a trigger allows only legal status moves (active ⇄ paused, active/paused → completed, completed → active, any open or completed → archived, archived → active) and makes archived goals read-only; the timestamps are set by the database and checked against the status; clients get `UPDATE` only on the editable columns and may `DELETE` only archived rows. `profiles` gains `default_daily_minutes`, `preferred_languages`, `learning_preferences` and `onboarding_completed_at` (backfilled for accounts that already have goals).
+- [x] **API:** `PATCH /v1/goals/{id}` (only the fields sent; `null` clears the description or target date), `PUT /v1/goals/{id}/status`, `DELETE /v1/goals/{id}` (archived only), `GET /v1/goals?status=…`, `GET /v1/goals/summary`, `PATCH /v1/me`, `POST /v1/me/onboarding/complete`. Goals created without minutes, languages or preferences take the user's saved defaults. Stable error codes: `GOAL_ARCHIVED`, `INVALID_STATUS_TRANSITION`, `GOAL_NOT_ARCHIVED`, `GOAL_LIMIT_REACHED` (restoring respects the cap). The target date must be today or later (one day of grace for time zones) and within 5 years, and is checked only when it changes, so a goal whose date later passes can still be edited.
+- [x] **Web:** onboarding wizard (`/onboarding`, three steps, every step skippable), dashboard with real counts and separate *In progress* / *Completed* lists with their own "load more" cursors, goal page, edit page, archived goals, settings, destructive-action confirmation dialogs (archive, delete), success/failure notices, `not-found` page, a phone-width navigation menu.
+- [x] **Tests (run locally, output observed):** 439 API tests passed, 1 skipped (the genuine-stack module, which needs Docker); 537 web unit/component tests passed; 16-test Playwright journey passed. Highlights: every transition in a table (legal and illegal) at the database and the API; archived read-only; delete only when archived; invalid input for every field; no token, bad token, another user's goal (read, edit, status, delete → 404, untouched); defaults applied; the web actions with only Supabase and the API mocked.
+- [x] **Accessibility and responsive pass:** axe-core (WCAG 2.0/2.1/2.2 A and AA plus best-practice rules) over sign-up, the three onboarding steps, dashboard, goal page, archive dialog, edit, new, settings and archived pages, light and dark, 1280 px and 375 px wide: **0 violations**. Phone layout checked for horizontal overflow.
+- [ ] **Deployment half of M2** (Vercel, Render, a staging Supabase project, migration-deploy job): **not started**; it needs accounts only the owner can create (§6).
+
+*Status notes (what is and is not verified):* Everything above marked with test counts ran on the primary machine against a real PostgreSQL 16. The **Playwright journey ran locally against a stand-in for Supabase Auth** (a small GoTrue-compatible server used only on this machine, not committed) because Docker is unavailable; it exercises the real web app, the real API and the real migrations, but not Supabase's own Auth service or roles. The same journey, the extended `tests/supabase_stack` module and the new migration under Supabase's real roles run only in the CI `supabase-stack` job: they stay ⏳ until that job's output for the M2 commit has been read. When the migration is applied to a hosted project (`npx supabase db push`), no new environment variable is needed.
+
+*Deliberate choices:* the `general` goal type from M1 is kept beside the five listed in the brief (a learner who "just wants to get better at something" is not forced into a wrong category); preferences live on `profiles`, not in a new table (ADR-025); the browser never redirects from a prefetched, data-dependent page (ADR-026).
 
 ## 5. Later milestones in outline
 
 Each gets its own detailed breakdown, written at the end of the previous milestone using what was learned.
 
-**M2 — Goal management, onboarding, first deploy.** `PATCH`/archive/complete/pause goals · profile settings (name, locale, timezone) · onboarding wizard capturing level, daily time, target date, languages · responsive app shell and navigation · theme and Indic-font verification · **deploy the skeleton** to Vercel + Render + a staging Supabase project · CI migration-deploy job (staging automatic, production manual) · confirm pooler mode and IPv4/IPv6 behaviour on Render.
+**M2 — remaining: first deploy.** Theme and Indic-font verification on real devices · **deploy the skeleton** to Vercel + Render + a staging Supabase project · CI migration-deploy job (staging automatic, production manual) · confirm pooler mode and IPv4/IPv6 behaviour on Render. *(Goal management, profile settings, the onboarding wizard and the responsive shell are done: §4.5.)*
 
 **M3 — Job queue, AI foundation, roadmap generation.** Migrations + pgTAP for `generation_jobs`, `ai_usage_events`, `roadmaps`, `roadmap_items`, `roadmap_item_prerequisites` · queue claim/lease/heartbeat/retry/cancel · worker process and compose service · `LLMProvider`, first real adapter, `FakeProvider` for tests · versioned prompts for intent parser and planner · **programmatic** plan validators (time budget, acyclic ordered prerequisites, objective coverage, unique sequence) with one bounded repair attempt · budgets and usage ledger · `Idempotency-Key` · job status API and progress UI · roadmap overview with learner edits · evaluation fixtures (malformed output, infeasible plans) · worker-kill and duplicate-submission tests. *Verify current provider SDK APIs and model names first.*
 

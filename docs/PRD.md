@@ -179,6 +179,10 @@ Recorded rather than asked, per the working agreement. Each can be overridden; n
 | **A12** | Supabase region should be near the users (for example Mumbai) — the account owner's choice. |
 | **A13** | Tooling: Python 3.14, Node 24, npm workspaces, `uv`. See ARCHITECTURE §15 for why. |
 | **A14** | No open-source licence has been chosen; until one is added the code is all-rights-reserved by default. |
+| **A15** | Onboarding is deliberately short and fully skippable: only a goal's title is required to start. Skipped answers fall back to sensible defaults (60 study minutes a day, English, all three learning preferences) that the learner can change in Settings. |
+| **A16** | Content languages at launch are English, Hindi and Odia (the same set the fonts cover). A goal carries one to five of them. Adding a language is a code change, not a database change. |
+| **A17** | A goal type outside the brief's five (academic subject, examination, certification, professional skill, interview preparation) is allowed as "general", so a learner is never forced into a wrong category. |
+| **A18** | Archiving is the everyday way to remove a goal; permanent deletion is a second, confirmed step available only for archived goals. A learner can hold at most 50 not-yet-archived goals (configurable). |
 
 ### Open questions (none block M1)
 

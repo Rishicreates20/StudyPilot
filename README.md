@@ -2,7 +2,7 @@
 
 An AI-powered **personal learning coach**. A learner states a goal (a topic, an exam, a certification) or provides study material; StudyPilot builds a personalised roadmap, teaches each topic with structured lessons, tests understanding with quizzes, finds weak spots, and adapts what to study next.
 
-> **Status: accounts, database and goals.** Sign-up, sign-in, sessions, a protected API and learning goals exist, backed by Supabase Auth and PostgreSQL with Row Level Security. There are **no AI features yet**; those arrive in the next milestones ([plan](docs/IMPLEMENTATION_PLAN.md)). Nothing in the UI is fake user data.
+> **Status: accounts, onboarding and learning goals.** You can sign up, set up your study preferences, create a learning goal, see it on your dashboard, edit it, pause, complete or archive it, and find it again after a refresh. Everything is backed by Supabase Auth and PostgreSQL with Row Level Security. There are **no AI features yet**; those arrive in the next milestones ([plan](docs/IMPLEMENTATION_PLAN.md)). Nothing in the UI is fake user data.
 
 "StudyPilot" is a working name and is configurable.
 
@@ -36,7 +36,10 @@ npm run dev:web    # http://localhost:3000
 |---|---|
 | <http://localhost:3000> | Landing page |
 | <http://localhost:3000/sign-up> · `/sign-in` | Create an account · sign in |
-| <http://localhost:3000/dashboard> | Your goals (needs sign-in) |
+| <http://localhost:3000/onboarding> | Three-step setup for new accounts (every step can be skipped) |
+| <http://localhost:3000/dashboard> | Your goals: in progress, completed, counts (needs sign-in) |
+| <http://localhost:3000/goals/new> · `/goals/archived` | Create a goal · archived goals (restore or delete) |
+| <http://localhost:3000/settings> | Name, language, time zone and default study preferences |
 | <http://localhost:3000/status> | Live web + API health |
 | <http://localhost:3000/design> | Design system preview |
 | <http://localhost:8000/healthz> · `/readyz` | API liveness · readiness (includes the database) |
@@ -86,8 +89,8 @@ docker compose up --build
 ## Repository layout
 
 ```
-apps/web             Next.js application (UI, auth pages, dashboard) and its Playwright tests (e2e/)
-services/api         FastAPI application (auth, goals, profile, health) and its tests
+apps/web             Next.js application (auth, onboarding, dashboard, goals, settings) and its Playwright tests (e2e/)
+services/api         FastAPI application (auth, goals, profile and preferences, health) and its tests
 packages/contracts   TypeScript types generated from the API's OpenAPI document
 supabase/            Database migrations (the schema's source of truth), local-stack config
 docs/                Product and engineering documentation
@@ -100,9 +103,11 @@ Planned, not yet created: `apps/mobile`, the job worker. See [ARCHITECTURE §3](
 ## What is implemented
 
 - **Accounts:** sign-up, sign-in, sign-out and session refresh with Supabase Auth. Sessions live in server-written HttpOnly cookies; the app never uses Supabase's browser client and never stores a token in script-readable storage. Pages that need an account are protected by the proxy **and** re-checked on the server; the API verifies the access token on every call.
-- **Protected API (`/v1`):** `GET /v1/me`, `POST|GET /v1/goals`, `GET /v1/goals/{id}`. The caller's identity comes only from a verified token. Another user's goal answers 404. Request bodies that name an owner are rejected.
-- **Database:** migrations for `profiles` (created automatically at sign-up) and `learning_goals`, with Row Level Security, explicit grants and constraints. Every user request runs in a transaction that assumes the `authenticated` role with the verified claims, so a missing filter in code still cannot leak another user's rows.
-- **Web:** landing, sign-up, sign-in, dashboard of your goals, create-goal form, design system, status page, fail-fast environment validation, loading/empty/error states.
+- **Learning goals:** title, description, type (academic subject, examination, certification, professional skill, interview preparation, or general), current level, optional target date, daily study minutes, preferred languages (English, Hindi, Odia) and learning preferences (examples, quizzes, revision). A goal can be edited, paused and resumed, completed and reopened, archived and restored; only an archived goal can be deleted, and an archived goal is read-only. The rules are enforced by the database as well as the API.
+- **Onboarding and preferences:** a short three-step wizard (about you, how you like to study, your first goal) where nothing but the goal's title is required; the answers are saved as your defaults and can be changed in Settings. Goals you create later start from those defaults.
+- **Protected API (`/v1`):** `GET|PATCH /v1/me`, `POST /v1/me/onboarding/complete`, `POST|GET /v1/goals`, `GET /v1/goals/summary`, `GET|PATCH|DELETE /v1/goals/{id}`, `PUT /v1/goals/{id}/status`. The caller's identity comes only from a verified token. Another user's goal answers 404. Request bodies that name an owner are rejected.
+- **Database:** migrations for `profiles` (created automatically at sign-up), `learning_goals` and the goal lifecycle, with Row Level Security, explicit grants and constraints. Every user request runs in a transaction that assumes the `authenticated` role with the verified claims, so a missing filter in code still cannot leak another user's rows.
+- **Web:** landing, sign-up, sign-in, onboarding, dashboard with real counts and lists, create/view/edit goal pages with confirmation for archive and delete, archived goals, settings, design system, status page, fail-fast environment validation, loading/empty/error states, and a layout that works from phone width up. The automated accessibility audit (axe-core, WCAG 2.2 AA, light and dark, phone and desktop) found no violations.
 - **Tooling:** Prettier, ESLint, `tsc`, ruff, pyright (strict), Vitest, pytest, Playwright, one `npm run check`, Dockerfiles, Compose, CI.
 
 ## Security

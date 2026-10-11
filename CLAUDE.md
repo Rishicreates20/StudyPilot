@@ -4,14 +4,14 @@ Durable instructions for AI-assisted work in this repository. Keep this file sho
 
 ## Status
 
-**Milestones 1a–1c are implemented:** foundation, Supabase database and auth, protected goals API, and the web sign-up / sign-in / dashboard / create-goal flow. There are no AI features yet. The next task is **Milestone 2** (goal management, onboarding, first deployment) in `docs/IMPLEMENTATION_PLAN.md`. Do not build later milestones early.
+**Implemented:** Milestone 1 (foundation, Supabase database and auth, protected goals API, sign-up / sign-in / dashboard) and the product half of Milestone 2 (onboarding wizard, goal edit / pause / complete / archive / restore / delete, settings and persistent preferences). There are no AI features yet. The next tasks are the *deployment* half of M2 and then **Milestone 3** (job queue, AI foundation) in `docs/IMPLEMENTATION_PLAN.md`. Do not build later milestones early.
 
-What is *not* yet observed: anything that needs a genuine Supabase stack (real Auth tokens, Supabase's own roles, the Playwright journey) — only the CI `supabase-stack` job can run it. Do not describe those as verified until a CI run has been read.
+What is *not* yet observed: anything that needs a genuine Supabase stack for the **newest** code (the goal-lifecycle migration under Supabase's own roles, the extended `tests/supabase_stack` module, the current Playwright journey). Only the CI `supabase-stack` job can run it; the journey was run locally against a throwaway stand-in for Supabase Auth, which proves the app but not Supabase. Do not describe those as verified until a CI run for that commit has been read. (CI run 38053557495, commit 301c86e, was green for everything up to Milestone 1.)
 
 ## Read first
 
-- `docs/PRD.md` — what and why; assumptions A1–A14
-- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…024); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
+- `docs/PRD.md` — what and why; assumptions A1–A18
+- `docs/ARCHITECTURE.md` — how; decision log (ADR-001…026); items marked **[verify]** must be checked against current official docs before use, **[spike]** items are time-boxed experiments
 - `docs/IMPLEMENTATION_PLAN.md` — milestone order, acceptance criteria (with honest status), risks
 - `docs/SUPABASE_SETUP.md` — how a Supabase project is configured and which environment variables exist
 
@@ -57,6 +57,8 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - The error boundary prop is `retry` (not `reset`/`unstable_retry`). `LayoutProps<"/">` / `PageProps` types come from `next typegen` (run by `npm run typecheck:web`). The request interceptor is `src/proxy.ts` (not `middleware.ts`).
 - **Auth:** sessions are server-side only. Never add `createBrowserClient` or store a token in `localStorage`/`sessionStorage`: the session cookies are written `HttpOnly` by `src/lib/supabase/cookies.ts` and the browser client could not read them. Decide who someone is with `getClaims()` (verifies the signature), never `getSession()`. The proxy is UX only; every protected page re-checks the session and the API verifies the token.
 - **Redirects:** run every `next`/return-to value through `safeRedirectPath`. When the API rejects a session Supabase still holds, redirect with `sessionEndedUrlFor` (the sign-in page shows its form for that marker); a plain `signInUrlFor` there would loop.
+- **No data-dependent redirects on prefetchable pages (ADR-026).** Next's client router caches a redirect seen during `<Link>` prefetch and replays it later, overriding a Server Action's redirect. Pages like the dashboard and onboarding show a prompt instead; only mutations redirect. Anything that builds the Supabase client runs `await connection()` first (`lib/supabase/server.ts` does).
+- **Goals:** the lifecycle (legal status moves, archived = read-only, delete only when archived) is enforced by the API *and* the database (ADR-025); change both together and keep `tests/db/test_db_goal_lifecycle.py` and `tests/api/test_api_goal_management.py` in step. Notices after a mutation use `?notice=` through the lookup table in `lib/goals/notices.ts`, never free text from the URL.
 - **Forms:** native forms → Server Actions → Zod → API; map the API's field errors back onto inputs; never echo a password in returned state; use one generic message for failed sign-in (no account enumeration).
 - Environment access goes through `src/lib/env.ts` (Zod, fail-fast); read `NEXT_PUBLIC_*` only via literal `process.env.NAME` there.
 - Use design tokens and the components in `src/components` (see `docs/DESIGN_SYSTEM.md`); never hard-code colours. Server-only tests need `// @vitest-environment node`.
@@ -69,7 +71,8 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - **Smart App Control is on and its verdicts change.** Unsigned native code can be blocked, including things that ran the day before (2026-10-10: the venv launcher and `ruff.exe`). Test any new native dependency early. Never suggest disabling the setting.
 - Long paths are disabled: work from a short path, not from deeply nested app-data folders. The current checkout lives under OneDrive, which makes installs slow (a first `npm install` took ~5 minutes); prefer a folder outside cloud sync.
 - Write multi-line files and any script containing template strings or backticks with the Write tool, not shell `-e`/heredocs: quoting mangled backticks here more than once. Small heredocs without backticks are fine.
-- No Docker/WSL here. The API's database tests *do* run locally (real PostgreSQL 16 via `pgserver`), but genuine-Supabase tests and the Playwright journey run only in CI. Do not claim they passed unless output was observed.
+- No Docker/WSL here. The API's database tests *do* run locally (real PostgreSQL 16 via `pgserver`), but genuine-Supabase tests run only in CI, and so does the Playwright journey against a genuine stack (it can be run locally only against a stand-in auth server that is not in the repository: say so if you do). Do not claim they passed unless output was observed.
+- In Playwright, Next 16 keeps previous routes in the DOM (hidden): query with `getByRole`, which ignores hidden elements, rather than `getByLabel` / `getByText`.
 - Git: the default branch is `main`; line endings are LF via `.gitattributes`.
 
 ## Security and secrets

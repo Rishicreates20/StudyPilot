@@ -118,9 +118,11 @@ uv run --directory services/api python -m pytest tests/supabase_stack -v
 
 ### Browser tests (Playwright)
 
-`apps/web/e2e` drives a real browser through sign-up, goal creation, reload, sign-out, sign-in and a
-second user who must see none of it. It needs the same stack, a production build made with the
-stack's `NEXT_PUBLIC_*` values, and a browser: see the header of `apps/web/playwright.config.ts`, then
+`apps/web/e2e` drives a real browser through sign-up, the three onboarding steps, creating, editing,
+pausing, completing, archiving, restoring and deleting goals, saving settings, reloads, sign-out,
+sign-in, and a second user who must get "not found" for the first user's goal (in the pages and
+straight from the API). It needs the same stack, a production build made with the stack's
+`NEXT_PUBLIC_*` values, and a browser: see the header of `apps/web/playwright.config.ts`, then
 
 ```bash
 cd apps/web
@@ -128,8 +130,16 @@ npx playwright install chromium
 npm run build && npm run e2e
 ```
 
-Neither of these two suites could be run on the primary machine (no Docker); the `supabase-stack` job
-in CI runs both.
+Neither of these two suites can run against a genuine Supabase stack on the primary machine (no
+Docker); the `supabase-stack` job in CI runs both. While building the onboarding and goal-management
+slice the journey *was* run locally, but against a throwaway stand-in for Supabase Auth (a tiny
+GoTrue-compatible server kept outside the repository) in front of the real web app, API and
+migrations. That proves the app's behaviour; it does not prove Supabase's own Auth service, so only a
+green `supabase-stack` job counts for that.
+
+If a Playwright run fails on a "strict mode violation" for a label or a text, remember that Next.js 16
+keeps the previous route's DOM hidden in the page: prefer `getByRole` (which ignores hidden
+elements) over `getByLabel` / `getByText`.
 
 ## Docker (not verified locally)
 

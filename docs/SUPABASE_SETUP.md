@@ -67,7 +67,9 @@ npx supabase db push --dry-run   # lists what would be applied
 npx supabase db push
 ```
 
-`link` asks for the database password. The two migrations create `profiles` (one row per user, filled automatically by a trigger when a user signs up) and `learning_goals`, each with Row Level Security and explicit grants. Check the result with `npx supabase migration list --linked`.
+`link` asks for the database password. The three migrations create `profiles` (one row per user, filled automatically by a trigger when a user signs up) and `learning_goals`, each with Row Level Security and explicit grants, and then add the goal lifecycle (legal status changes, archived goals read-only, delete only after archiving) and the learner's saved preferences. Check the result with `npx supabase migration list --linked`.
+
+**Updating an existing project:** if you applied the first two migrations earlier, run `npx supabase db push` again; only the new `20261010100000_goal_lifecycle_and_preferences` file is applied. No new environment variable or dashboard setting is needed. Existing accounts that already have goals are marked as having finished onboarding; everyone else is offered it on their next visit.
 
 ### Step 5. Choose the token verification mode
 
@@ -197,10 +199,11 @@ If Supabase is not configured in development, the sign-in and sign-up pages show
 | Ownership: another user's goal gives 404; list shows only your own; a request body naming another owner is refused | API tests against a real PostgreSQL 16 with the real migrations | Yes, locally |
 | Row Level Security, grants, constraints, deleted accounts | Database tests against the same PostgreSQL | Yes, locally |
 | Sign-in / sign-up / sign-out actions never echo passwords, never leak provider errors, refuse open redirects; the proxy refreshes the session and writes HttpOnly cookies; the API client sends only the bearer token | Web unit tests with the Supabase client mocked | Yes, locally |
-| **Genuine Supabase Auth tokens verify; the profile trigger fires on a real `auth.users` insert; RLS holds under Supabase's own roles; PostgREST cannot read the tables; sign-out ends the session** | `services/api/tests/supabase_stack` against `supabase start` | **Only in CI** (needs Docker) — see the `supabase-stack` job |
-| **Real browser flow: sign up, create a goal, reload, sign out, sign in, second user sees nothing** | Playwright (`apps/web/e2e`) against the same stack | **Only in CI** |
+| Goal lifecycle: every legal and illegal status change, archived goals read-only, `completed_at` / `archived_at` set only by the database, delete only when archived, preferences and onboarding saved per user | Database tests and API tests against the same PostgreSQL (real migrations) | Yes, locally |
+| **Genuine Supabase Auth tokens verify; the profile trigger fires on a real `auth.users` insert; RLS holds under Supabase's own roles; PostgREST cannot read the tables; sign-out ends the session** | `services/api/tests/supabase_stack` against `supabase start` | **Only in CI** (needs Docker). Observed green for the first two migrations (run 38053557495); the lifecycle and preferences tests added since have not run on a genuine stack yet |
+| **Real browser flow** (sign up, onboarding, goals, edit, lifecycle, settings, reload, sign out, sign in, second user sees nothing) | Playwright (`apps/web/e2e`) against the same stack | **Only in CI.** The shorter M1 version is observed green; the current version ran locally against a stand-in for Supabase Auth, not against Supabase |
 
-The two rows marked "only in CI" are the ones this machine cannot run. Do not treat them as proven until the `supabase-stack` job is green.
+The rows marked "only in CI" are the ones this machine cannot run against Supabase itself. Do not treat the newest parts as proven on Supabase until the `supabase-stack` job is green for the commit that introduced them.
 
 ## 6. Troubleshooting
 
