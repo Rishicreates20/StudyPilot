@@ -2,7 +2,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const auth = vi.hoisted(() => ({ verifyOtp: vi.fn() }));
+const auth = vi.hoisted(() => ({ verifyOtp: vi.fn(), exchangeCodeForSession: vi.fn() }));
 const supabase = vi.hoisted(() => ({ current: null as unknown }));
 
 vi.mock("next/navigation", () => ({
@@ -81,5 +81,65 @@ describe("GET /auth/confirm", () => {
     await expect(call("token_hash=abc&type=email")).rejects.toThrow(
       "REDIRECT:/sign-in?error=confirmation_failed",
     );
+  });
+});
+
+describe("GET /auth/confirm with a code (Supabase's built-in confirmation email)", () => {
+  const CODE = "c095dca5-53b7-4574-925a-243491f08a72";
+
+  it("turns the code into a session and goes where the link asked", async () => {
+    auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+
+    await expect(call(`code=${CODE}&next=/onboarding`)).rejects.toThrow("REDIRECT:/onboarding");
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledWith(CODE);
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it("goes to the dashboard when no destination was given", async () => {
+    auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+
+    await expect(call(`code=${CODE}`)).rejects.toThrow("REDIRECT:/dashboard");
+  });
+
+  it.each(["https://evil.example", "//evil.example", "/\\evil.example"])(
+    "will not redirect off-site via next=%s",
+    async (next) => {
+      auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+
+      await expect(call(`code=${CODE}&next=${encodeURIComponent(next)}`)).rejects.toThrow(
+        "REDIRECT:/dashboard",
+      );
+    },
+  );
+
+  it("explains kindly when the code cannot be used (usually another browser or device)", async () => {
+    auth.exchangeCodeForSession.mockResolvedValue({ error: { code: "flow_state_not_found" } });
+
+    await expect(call(`code=${CODE}`)).rejects.toThrow("REDIRECT:/sign-in?error=confirm_signin");
+  });
+
+  it("does the same when Supabase is not configured", async () => {
+    supabase.current = null;
+
+    await expect(call(`code=${CODE}`)).rejects.toThrow("REDIRECT:/sign-in?error=confirm_signin");
+  });
+
+  it.each(["", "short", "has space in it", "<script>alert(1)</script>", "x".repeat(200)])(
+    "never sends the odd code %j to Supabase",
+    async (code) => {
+      await expect(call(`code=${encodeURIComponent(code)}`)).rejects.toThrow(
+        "REDIRECT:/sign-in?error=confirmation_failed",
+      );
+      expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("prefers nothing over guessing: a link with both kinds of parameter uses the code only", async () => {
+    auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+
+    await expect(call(`code=${CODE}&token_hash=abc&type=email`)).rejects.toThrow("REDIRECT");
+
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
   });
 });

@@ -51,6 +51,18 @@ export function signInUrlFor(destination: string): string {
 /** The `error` value of a sign-in URL that was reached because the API refused the session. */
 export const SESSION_ENDED_ERROR = "session_ended";
 
+/** Sign-in marker for a confirmation link whose code could not be turned into a session. */
+export const CONFIRM_SIGN_IN_ERROR = "confirm_signin";
+
+/**
+ * Whether `value` looks like the one-time `code` Supabase appends to a confirmation link
+ * (a UUID today; letters, digits and `-._~` up to 128 characters are accepted so a change of
+ * format does not break the link). Anything else is never forwarded or exchanged.
+ */
+export function isAuthCode(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9._~-]{8,128}$/.test(value);
+}
+
 /**
  * Sign-in after the API REFUSED a session that Supabase still considers valid (for example the
  * account was deleted, or the token is no longer acceptable). The sign-in page must show its form

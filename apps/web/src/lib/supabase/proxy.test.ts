@@ -132,3 +132,46 @@ describe("updateSession", () => {
     expect(claims.getClaims).not.toHaveBeenCalled();
   });
 });
+
+describe("updateSession with a confirmation code on the landing page", () => {
+  const CODE = "c095dca5-53b7-4574-925a-243491f08a72";
+
+  it("forwards Supabase's /?code= link to the confirm route and the first-run setup", async () => {
+    const response = await updateSession(request(`/?code=${CODE}`));
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(location.pathname).toBe("/auth/confirm");
+    expect(location.searchParams.get("code")).toBe(CODE);
+    expect(location.searchParams.get("next")).toBe("/onboarding");
+    expect(claims.getClaims).not.toHaveBeenCalled();
+  });
+
+  it("forwards nothing else from the landing page's query", async () => {
+    const response = await updateSession(request(`/?code=${CODE}&next=https://evil.example&x=1`));
+
+    const location = new URL(response.headers.get("location") ?? "");
+    expect([...location.searchParams.keys()].sort()).toEqual(["code", "next"]);
+    expect(location.searchParams.get("next")).toBe("/onboarding");
+  });
+
+  it.each(["", "short", "a b c d e f g h", "<img src=x>", "x".repeat(200)])(
+    "leaves the landing page alone for the odd code %j",
+    async (code) => {
+      claims.getClaims.mockResolvedValue({ data: null });
+
+      const response = await updateSession(request(`/?code=${encodeURIComponent(code)}`));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+    },
+  );
+
+  it("only the landing page forwards: a code on another page is just a parameter there", async () => {
+    claims.getClaims.mockResolvedValue({ data: null });
+
+    const response = await updateSession(request(`/status?code=${CODE}`));
+
+    expect(response.status).toBe(200);
+  });
+});

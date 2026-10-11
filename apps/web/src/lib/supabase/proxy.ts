@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isProtectedPath, signInUrlFor } from "@/lib/auth/paths";
+import { isAuthCode, isProtectedPath, signInUrlFor } from "@/lib/auth/paths";
 import { getSupabaseConfig } from "@/lib/env";
+import { ONBOARDING_PATH } from "@/lib/onboarding/paths";
 import { hardenAuthCookie, shouldUseSecureCookies } from "@/lib/supabase/cookies";
 
 /**
@@ -20,6 +21,17 @@ import { hardenAuthCookie, shouldUseSecureCookies } from "@/lib/supabase/cookies
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const config = getSupabaseConfig();
   if (!config) return NextResponse.next({ request });
+
+  // Supabase's built-in confirmation email lands on the Site URL (here, the landing page) with a
+  // one-time `code`. Pass it to the route that turns it into a session, and start the new account
+  // with the short setup. Nothing else about the request is trusted or forwarded.
+  const landingCode = request.nextUrl.searchParams.get("code");
+  if (request.nextUrl.pathname === "/" && isAuthCode(landingCode)) {
+    const confirm = new URL("/auth/confirm", request.url);
+    confirm.searchParams.set("code", landingCode);
+    confirm.searchParams.set("next", ONBOARDING_PATH);
+    return NextResponse.redirect(confirm);
+  }
 
   let supabaseResponse = NextResponse.next({ request });
   const secure = shouldUseSecureCookies(config.url);

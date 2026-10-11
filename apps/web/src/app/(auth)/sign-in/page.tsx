@@ -8,7 +8,12 @@ import { AuthNotConfigured } from "@/components/auth/auth-not-configured";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { safeRedirectPath, SESSION_ENDED_ERROR, SIGN_UP_PATH } from "@/lib/auth/paths";
+import {
+  CONFIRM_SIGN_IN_ERROR,
+  safeRedirectPath,
+  SESSION_ENDED_ERROR,
+  SIGN_UP_PATH,
+} from "@/lib/auth/paths";
 import { getSessionUser } from "@/lib/auth/session";
 import { getSupabaseConfig } from "@/lib/env";
 import { firstParam, type SearchParams } from "@/lib/search-params";
@@ -52,6 +57,14 @@ async function SignInContent({ searchParams }: { searchParams: SearchParams }) {
         {error === SESSION_ENDED_ERROR ? (
           <Alert variant="warning">
             <AlertDescription>Your session has ended. Sign in again to continue.</AlertDescription>
+          </Alert>
+        ) : null}
+        {error === CONFIRM_SIGN_IN_ERROR ? (
+          <Alert variant="info">
+            <AlertDescription>
+              If you followed the confirmation link in your email, your address is confirmed. Sign
+              in to continue.
+            </AlertDescription>
           </Alert>
         ) : null}
         {error === "confirmation_failed" ? (
