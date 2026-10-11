@@ -66,7 +66,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="en" className={fontVariables} suppressHydrationWarning>
-      <body className="min-h-dvh">
+      {/* Browser extensions (Grammarly and the like) add attributes to <body> before React loads; the
+          mismatch is theirs, harmless, and would otherwise show as an error in development. */}
+      <body className="min-h-dvh" suppressHydrationWarning>
         <ThemeProvider>
           <SkipLink />
           <div className="flex min-h-dvh flex-col">

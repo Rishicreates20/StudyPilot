@@ -66,7 +66,11 @@ export function JobProgress({
     return () => clearInterval(timer);
   }, [job.created_at, job.status, job.attempts]);
 
-  const retrying = job.status === "queued" && job.attempts > 0;
+  // `attempts` counts the tries already started: a queued job is waiting for its next one, a
+  // running job is on its latest. Anything past the first is a retry, and the learner is told so
+  // (a long wait with no explanation looks like a crash).
+  const attemptNumber = job.status === "queued" ? job.attempts + 1 : job.attempts;
+  const retrying = attemptNumber > 1;
 
   return (
     <Card>
@@ -87,9 +91,15 @@ export function JobProgress({
           {stageText} {job.progress}%
         </p>
         {retrying ? (
-          <p className="text-sm text-muted-foreground">
-            Attempt {Math.min(job.attempts + 1, job.max_attempts)} of {job.max_attempts}.
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground">
+              Attempt {Math.min(attemptNumber, job.max_attempts)} of {job.max_attempts}.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              The first try did not work out (often the AI service is busy), so it is being tried
+              again. Nothing is wrong with your account.
+            </p>
+          </>
         ) : null}
         {slowStart ? (
           <p className="text-sm text-muted-foreground">

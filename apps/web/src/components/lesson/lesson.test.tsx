@@ -716,6 +716,31 @@ describe("LessonGenerationStatus", () => {
     expect(screen.getAllByText(/busy/i).length).toBeGreaterThan(0);
   });
 
+  it("says a job that is running its second try is a retry, not a crash", () => {
+    render(
+      <LessonGenerationStatus
+        goalId={GOAL}
+        itemId={ITEM}
+        job={lessonJob({ status: "running", stage: "loading", progress: 5, attempts: 2 })}
+      />,
+    );
+
+    expect(screen.getByText("Attempt 2 of 3.")).toBeInTheDocument();
+    expect(screen.getByText(/tried again/)).toBeInTheDocument();
+  });
+
+  it("does not mention a retry on the first try", () => {
+    render(
+      <LessonGenerationStatus
+        goalId={GOAL}
+        itemId={ITEM}
+        job={lessonJob({ status: "running", stage: "writing", attempts: 1 })}
+      />,
+    );
+
+    expect(screen.queryByText(/Attempt/)).not.toBeInTheDocument();
+  });
+
   it("explains that the current lesson stays while a new version is written", () => {
     render(<LessonGenerationStatus goalId={GOAL} itemId={ITEM} job={lessonJob()} newVersion />);
 
