@@ -146,21 +146,7 @@ def test_the_anonymous_role_cannot_read_or_write_goals(
             connection.execute(statement)
 
 
-@pytest.mark.parametrize(
-    "statement",
-    [
-        sql.SQL("update public.learning_goals set title = 'changed' where id = %s"),
-        sql.SQL("delete from public.learning_goals where id = %s"),
-    ],
-)
-def test_clients_cannot_update_or_delete_goals_yet(database_dsn: str, statement: sql.SQL) -> None:
-    """Editing arrives with its endpoint and its own migration; no grant exists until then."""
-    alice = create_auth_user(database_dsn)
-    goal = add_goal(database_dsn, alice)
-
-    with admin(database_dsn).acting_as("authenticated", alice) as connection:
-        with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            connection.execute(statement, (goal,))
+# Editing, deleting and the status lifecycle live in test_db_goal_lifecycle.py.
 
 
 # --- Constraints -----------------------------------------------------------------------------

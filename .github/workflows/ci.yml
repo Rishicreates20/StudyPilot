@@ -119,6 +119,9 @@ jobs:
         run: python3 .github/scripts/supabase_stack_env.py
       - name: API tests against the genuine stack (real tokens, real roles, real RLS)
         working-directory: services/api
+        env:
+          # A missing stack must fail this step, never skip it: a green job has to mean these ran.
+          REQUIRE_SUPABASE_STACK: "1"
         run: uv run python -m pytest tests/supabase_stack -v
       - name: Build the web app against the stack
         run: npm run build

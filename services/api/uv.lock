@@ -516,6 +516,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "structlog" },
+    { name = "tzdata" },
     { name = "uvicorn" },
 ]
 
@@ -535,6 +536,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.15.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = "==2.15.1" },
     { name = "structlog", specifier = "==26.1.0" },
+    { name = "tzdata", specifier = "==2026.5" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 

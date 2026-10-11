@@ -49,11 +49,14 @@ DB_URL = os.environ.get("SUPABASE_STACK_DB_URL", "")
 JWT_SECRET = os.environ.get("SUPABASE_STACK_JWT_SECRET", "")
 
 if not (STACK_URL and PUBLISHABLE_KEY and DB_URL):
-    pytest.skip(
+    _MISSING = (
         "No Supabase stack configured (set SUPABASE_STACK_URL, SUPABASE_STACK_PUBLISHABLE_KEY and "
-        "SUPABASE_STACK_DB_URL; see the module docstring).",
-        allow_module_level=True,
+        "SUPABASE_STACK_DB_URL; see the module docstring)."
     )
+    if os.environ.get("REQUIRE_SUPABASE_STACK") == "1":
+        # CI sets this: a stack job whose tests were silently skipped would prove nothing.
+        raise RuntimeError(_MISSING)
+    pytest.skip(_MISSING, allow_module_level=True)
 
 AUTH_URL = f"{STACK_URL}/auth/v1"
 
@@ -467,3 +470,139 @@ def test_deleting_an_account_removes_its_data_and_locks_out_its_token(
     response = api.get("/v1/me", headers=account.headers)
     assert response.status_code == 401
     assert response.json()["code"] == "ACCOUNT_NOT_FOUND"
+
+
+# --- Managing goals, under genuine Supabase tokens, roles and grants ---------------------------
+
+
+def move(api: TestClient, account: Account, goal_id: str, status: str) -> Any:
+    return api.put(f"/v1/goals/{goal_id}/status", headers=account.headers, json={"status": status})
+
+
+def test_a_goal_can_be_edited_and_moved_through_its_lifecycle(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    account = sign_up()
+    goal = create_goal(api, account, "Learn Rust")
+
+    edited = api.patch(
+        f"/v1/goals/{goal['id']}",
+        headers=account.headers,
+        json={"title": "Learn Rust ownership", "daily_minutes": 45, "description": "Chapter 4"},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["title"] == "Learn Rust ownership"
+
+    for status in ("paused", "active", "completed", "active", "archived"):
+        response = move(api, account, goal["id"], status)
+        assert response.status_code == 200, f"{status}: {response.text}"
+        assert response.json()["status"] == status
+
+    archived = api.get(f"/v1/goals/{goal['id']}", headers=account.headers).json()
+    assert archived["archived_at"] is not None and archived["completed_at"] is None
+    refused = api.patch(f"/v1/goals/{goal['id']}", headers=account.headers, json={"title": "No"})
+    assert refused.status_code == 409 and refused.json()["code"] == "GOAL_ARCHIVED"
+
+
+def test_only_an_archived_goal_can_be_deleted(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    account = sign_up()
+    goal = create_goal(api, account, "Delete me twice")
+
+    early = api.delete(f"/v1/goals/{goal['id']}", headers=account.headers)
+    assert move(api, account, goal["id"], "archived").status_code == 200
+    deleted = api.delete(f"/v1/goals/{goal['id']}", headers=account.headers)
+    again = api.delete(f"/v1/goals/{goal['id']}", headers=account.headers)
+
+    assert (early.status_code, deleted.status_code, again.status_code) == (409, 204, 404)
+
+
+def test_another_learner_cannot_edit_move_or_delete_a_goal(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada, mallory = sign_up(), sign_up()
+    goal = create_goal(api, ada, "Ada's goal")
+    move(api, ada, goal["id"], "archived")  # archived, so a delete would be legal for Ada
+
+    edit = api.patch(f"/v1/goals/{goal['id']}", headers=mallory.headers, json={"title": "Mine"})
+    status = move(api, mallory, goal["id"], "active")
+    delete = api.delete(f"/v1/goals/{goal['id']}", headers=mallory.headers)
+
+    assert [edit.status_code, status.status_code, delete.status_code] == [404, 404, 404]
+    assert api.get(f"/v1/goals/{goal['id']}", headers=ada.headers).json()["status"] == "archived"
+
+
+def test_the_database_itself_refuses_illegal_goal_changes_under_the_real_roles(
+    api: TestClient,
+    database: psycopg.Connection[DictRow],
+    sign_up: Callable[..., Account],
+) -> None:
+    account = sign_up()
+    goal = create_goal(api, account, "Guarded")
+
+    # Columns the system owns are not writable by the authenticated role.
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", account.id)
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            database.execute(
+                "update public.learning_goals set completed_at = now() where id = %s", (goal["id"],)
+            )
+    # An illegal status jump, and a delete of a goal that is not archived, are refused too.
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", account.id)
+        database.execute(
+            "update public.learning_goals set status = 'completed' where id = %s", (goal["id"],)
+        )
+        with pytest.raises(psycopg.errors.CheckViolation):
+            database.execute(
+                "update public.learning_goals set status = 'paused' where id = %s", (goal["id"],)
+            )
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", account.id)
+        deleted = database.execute("delete from public.learning_goals where id = %s", (goal["id"],))
+        assert deleted.rowcount == 0
+
+
+def test_preferences_and_onboarding_persist_and_shape_new_goals(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    account = sign_up()
+    assert api.get("/v1/me", headers=account.headers).json()["onboarding_completed"] is False
+
+    saved = api.patch(
+        "/v1/me",
+        headers=account.headers,
+        json={
+            "default_daily_minutes": 90,
+            "preferred_languages": ["hi"],
+            "learning_preferences": ["quizzes"],
+            "timezone": "Europe/London",
+        },
+    )
+    done = api.post("/v1/me/onboarding/complete", headers=account.headers)
+    goal = create_goal(api, account, "Starts from my preferences")
+
+    assert saved.status_code == 200, saved.text
+    assert done.json()["onboarding_completed"] is True
+    me = api.get("/v1/me", headers=account.headers).json()
+    assert me["timezone"] == "Europe/London"
+    assert me["preferences"]["default_daily_minutes"] == 90
+    assert (goal["daily_minutes"], goal["preferred_languages"], goal["learning_preferences"]) == (
+        90,
+        ["hi"],
+        ["quizzes"],
+    )
+
+
+def test_one_learners_preferences_never_reach_another(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada, grace = sign_up(), sign_up()
+
+    api.patch("/v1/me", headers=ada.headers, json={"default_daily_minutes": 300})
+
+    assert (
+        api.get("/v1/me", headers=grace.headers).json()["preferences"]["default_daily_minutes"]
+        == 60
+    )

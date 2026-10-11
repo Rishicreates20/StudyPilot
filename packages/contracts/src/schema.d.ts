@@ -60,8 +60,28 @@ export interface paths {
         /**
          * Create a learning goal
          * @description Creates a goal owned by the caller. The owner is never taken from the request body.
+         *
+         *     Settings left out of the body (daily minutes, languages, kinds of practice) come from the
+         *     caller's saved preferences.
          */
         post: operations["create_goal_v1_goals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many goals are in each state */
+        get: operations["goal_summary_v1_goals_summary_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -78,6 +98,34 @@ export interface paths {
         /** Read one of the caller's goals */
         get: operations["read_goal_v1_goals__goal_id__get"];
         put?: never;
+        post?: never;
+        /** Permanently delete an archived goal */
+        delete: operations["delete_goal_v1_goals__goal_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit one of the caller's goals
+         * @description Changes only the fields sent. ``null`` clears the description or the target date.
+         */
+        patch: operations["update_goal_v1_goals__goal_id__patch"];
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pause, resume, complete, reopen, archive or restore a goal
+         * @description Moves a goal along its lifecycle. Asking for the state it is already in changes nothing.
+         *
+         *     Allowed: active ⇄ paused, active or paused → completed, completed → active (reopen),
+         *     any open or completed goal → archived, archived → active (restore).
+         */
+        put: operations["change_goal_status_v1_goals__goal_id__status_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -102,6 +150,30 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update the caller's profile and preferences
+         * @description Changes only the fields sent. Preferences pre-fill new goals; they never alter old ones.
+         */
+        patch: operations["update_me_v1_me_patch"];
+        trace?: never;
+    };
+    "/v1/me/onboarding/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish (or skip) onboarding
+         * @description Marks onboarding as done. Calling it again is harmless; the first time is kept.
+         */
+        post: operations["complete_onboarding_v1_me_onboarding_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -120,6 +192,10 @@ export interface components {
         };
         /** Goal */
         Goal: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Completed At */
+            completed_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -144,6 +220,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Learning Preferences */
+            learning_preferences: ("examples" | "quizzes" | "revision")[];
             /** Preferred Languages */
             preferred_languages: string[];
             /**
@@ -161,7 +239,10 @@ export interface components {
              */
             updated_at: string;
         };
-        /** GoalCreate */
+        /**
+         * GoalCreate
+         * @description A new goal. Omitted settings fall back to the learner's saved preferences.
+         */
         GoalCreate: {
             /**
              * Current Level
@@ -169,11 +250,8 @@ export interface components {
              * @enum {string}
              */
             current_level: "unknown" | "beginner" | "intermediate" | "advanced";
-            /**
-             * Daily Minutes
-             * @default 60
-             */
-            daily_minutes: number;
+            /** Daily Minutes */
+            daily_minutes?: number | null;
             /** Description */
             description?: string | null;
             /**
@@ -182,8 +260,10 @@ export interface components {
              * @enum {string}
              */
             goal_type: "exam" | "academic_subject" | "professional_skill" | "certification" | "interview" | "general";
+            /** Learning Preferences */
+            learning_preferences?: ("examples" | "quizzes" | "revision")[] | null;
             /** Preferred Languages */
-            preferred_languages?: string[];
+            preferred_languages?: string[] | null;
             /** Target Date */
             target_date?: string | null;
             /** Title */
@@ -195,6 +275,53 @@ export interface components {
             items: components["schemas"]["Goal"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /** GoalStatusChange */
+        GoalStatusChange: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "paused" | "completed" | "archived";
+        };
+        /**
+         * GoalSummary
+         * @description How many goals the caller has in each state.
+         */
+        GoalSummary: {
+            /** Active */
+            active: number;
+            /** Archived */
+            archived: number;
+            /** Completed */
+            completed: number;
+            /** Paused */
+            paused: number;
+        };
+        /**
+         * GoalUpdate
+         * @description Changes to a goal. Send only the fields to change; ``null`` clears an optional field.
+         *
+         *     The target date is checked against today only when it actually changes (see the service), so
+         *     a goal whose date has passed can still be renamed.
+         */
+        GoalUpdate: {
+            /** Current Level */
+            current_level?: ("unknown" | "beginner" | "intermediate" | "advanced") | null;
+            /** Daily Minutes */
+            daily_minutes?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Goal Type */
+            goal_type?: ("exam" | "academic_subject" | "professional_skill" | "certification" | "interview" | "general") | null;
+            /** Learning Preferences */
+            learning_preferences?: ("examples" | "quizzes" | "revision")[] | null;
+            /** Preferred Languages */
+            preferred_languages?: string[] | null;
+            /** Target Date */
+            target_date?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -234,8 +361,41 @@ export interface components {
             id: string;
             /** Locale */
             locale: string;
+            /** Onboarding Completed */
+            onboarding_completed: boolean;
+            preferences: components["schemas"]["Preferences"];
             /** Timezone */
             timezone: string;
+        };
+        /**
+         * MeUpdate
+         * @description Changes to the caller's profile and preferences. Send only what changes.
+         */
+        MeUpdate: {
+            /** Default Daily Minutes */
+            default_daily_minutes?: number | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Learning Preferences */
+            learning_preferences?: ("examples" | "quizzes" | "revision")[] | null;
+            /** Locale */
+            locale?: string | null;
+            /** Preferred Languages */
+            preferred_languages?: string[] | null;
+            /** Timezone */
+            timezone?: string | null;
+        };
+        /**
+         * Preferences
+         * @description Saved choices that pre-fill new goals. Each goal can still override them.
+         */
+        Preferences: {
+            /** Default Daily Minutes */
+            default_daily_minutes: number;
+            /** Learning Preferences */
+            learning_preferences: ("examples" | "quizzes" | "revision")[];
+            /** Preferred Languages */
+            preferred_languages: string[];
         };
         /** ProblemDetail */
         ProblemDetail: {
@@ -343,8 +503,8 @@ export interface operations {
     list_goals_v1_goals_get: {
         parameters: {
             query?: {
-                /** @description Only goals with this status. Omit to list every goal except archived. */
-                status?: ("active" | "paused" | "completed" | "archived") | null;
+                /** @description Only goals in these states (repeat the parameter for several). Omit to list every goal except archived ones. */
+                status?: ("active" | "paused" | "completed" | "archived")[] | null;
                 limit?: number;
                 /** @description From a previous page. */
                 cursor?: string | null;
@@ -453,6 +613,44 @@ export interface operations {
             };
         };
     };
+    goal_summary_v1_goals_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalSummary"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_goal_v1_goals__goal_id__get: {
         parameters: {
             query?: never;
@@ -511,7 +709,303 @@ export interface operations {
             };
         };
     };
+    delete_goal_v1_goals__goal_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Only archived goals can be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    update_goal_v1_goals__goal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Goal"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal is archived */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    change_goal_status_v1_goals__goal_id__status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalStatusChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Goal"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description That change isn't allowed from this state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_me_v1_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    update_me_v1_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    complete_onboarding_v1_me_onboarding_complete_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -95,8 +95,20 @@ class ConflictError(AppError):
 
 
 class InvalidRequestError(AppError):
+    """A request that is well-formed but not acceptable, optionally naming the offending fields."""
+
     status_code = 422
     code = "INVALID_REQUEST"
+
+    def __init__(
+        self,
+        detail: str | None = None,
+        *,
+        code: str | None = None,
+        errors: list[FieldError] | None = None,
+    ) -> None:
+        super().__init__(detail, code=code)
+        self.errors = errors
 
 
 class ServiceUnavailableError(AppError):
@@ -140,6 +152,7 @@ async def _app_error_handler(request: Request, exc: Exception) -> JSONResponse:
         status=app_error.status_code,
         code=app_error.code,
         detail=app_error.detail,
+        errors=getattr(app_error, "errors", None),
         headers=app_error.headers,
     )
 

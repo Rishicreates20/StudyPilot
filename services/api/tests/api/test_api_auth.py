@@ -42,6 +42,12 @@ def test_a_valid_token_returns_the_callers_own_profile(
         "display_name": "Ada",
         "locale": "en",
         "timezone": "Asia/Kolkata",
+        "onboarding_completed": False,
+        "preferences": {
+            "default_daily_minutes": 60,
+            "preferred_languages": ["en"],
+            "learning_preferences": ["examples", "quizzes", "revision"],
+        },
         "created_at": None,
     }
 

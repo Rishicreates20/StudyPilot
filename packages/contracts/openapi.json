@@ -26,6 +26,30 @@
       },
       "Goal": {
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -72,6 +96,18 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "learning_preferences": {
+            "items": {
+              "enum": [
+                "examples",
+                "quizzes",
+                "revision"
+              ],
+              "type": "string"
+            },
+            "title": "Learning Preferences",
+            "type": "array"
           },
           "preferred_languages": {
             "items": {
@@ -121,7 +157,10 @@
           "target_date",
           "daily_minutes",
           "preferred_languages",
+          "learning_preferences",
           "status",
+          "completed_at",
+          "archived_at",
           "created_at",
           "updated_at"
         ],
@@ -130,6 +169,7 @@
       },
       "GoalCreate": {
         "additionalProperties": false,
+        "description": "A new goal. Omitted settings fall back to the learner's saved preferences.",
         "properties": {
           "current_level": {
             "default": "unknown",
@@ -143,11 +183,17 @@
             "type": "string"
           },
           "daily_minutes": {
-            "default": 60,
-            "maximum": 480.0,
-            "minimum": 10.0,
-            "title": "Daily Minutes",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 480.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Minutes"
           },
           "description": {
             "anyOf": [
@@ -174,14 +220,41 @@
             "title": "Goal Type",
             "type": "string"
           },
+          "learning_preferences": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "examples",
+                    "quizzes",
+                    "revision"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Preferences"
+          },
           "preferred_languages": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 5,
-            "minItems": 1,
-            "title": "Preferred Languages",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Languages"
           },
           "target_date": {
             "anyOf": [
@@ -234,6 +307,185 @@
           "next_cursor"
         ],
         "title": "GoalPage",
+        "type": "object"
+      },
+      "GoalStatusChange": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "completed",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "GoalStatusChange",
+        "type": "object"
+      },
+      "GoalSummary": {
+        "description": "How many goals the caller has in each state.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "archived": {
+            "title": "Archived",
+            "type": "integer"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "paused",
+          "completed",
+          "archived"
+        ],
+        "title": "GoalSummary",
+        "type": "object"
+      },
+      "GoalUpdate": {
+        "additionalProperties": false,
+        "description": "Changes to a goal. Send only the fields to change; ``null`` clears an optional field.\n\nThe target date is checked against today only when it actually changes (see the service), so\na goal whose date has passed can still be renamed.",
+        "properties": {
+          "current_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "beginner",
+                  "intermediate",
+                  "advanced"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Level"
+          },
+          "daily_minutes": {
+            "anyOf": [
+              {
+                "maximum": 480.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Minutes"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "goal_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "exam",
+                  "academic_subject",
+                  "professional_skill",
+                  "certification",
+                  "interview",
+                  "general"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Type"
+          },
+          "learning_preferences": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "examples",
+                    "quizzes",
+                    "revision"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Preferences"
+          },
+          "preferred_languages": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Languages"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "GoalUpdate",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -312,6 +564,13 @@
             "title": "Locale",
             "type": "string"
           },
+          "onboarding_completed": {
+            "title": "Onboarding Completed",
+            "type": "boolean"
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/Preferences"
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -323,9 +582,138 @@
           "display_name",
           "locale",
           "timezone",
+          "onboarding_completed",
+          "preferences",
           "created_at"
         ],
         "title": "Me",
+        "type": "object"
+      },
+      "MeUpdate": {
+        "additionalProperties": false,
+        "description": "Changes to the caller's profile and preferences. Send only what changes.",
+        "properties": {
+          "default_daily_minutes": {
+            "anyOf": [
+              {
+                "maximum": 480.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Daily Minutes"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "learning_preferences": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "examples",
+                    "quizzes",
+                    "revision"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Preferences"
+          },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          },
+          "preferred_languages": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Languages"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "MeUpdate",
+        "type": "object"
+      },
+      "Preferences": {
+        "description": "Saved choices that pre-fill new goals. Each goal can still override them.",
+        "properties": {
+          "default_daily_minutes": {
+            "title": "Default Daily Minutes",
+            "type": "integer"
+          },
+          "learning_preferences": {
+            "items": {
+              "enum": [
+                "examples",
+                "quizzes",
+                "revision"
+              ],
+              "type": "string"
+            },
+            "title": "Learning Preferences",
+            "type": "array"
+          },
+          "preferred_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Preferred Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "default_daily_minutes",
+          "preferred_languages",
+          "learning_preferences"
+        ],
+        "title": "Preferences",
         "type": "object"
       },
       "ProblemDetail": {
@@ -534,26 +922,29 @@
         "operationId": "list_goals_v1_goals_get",
         "parameters": [
           {
-            "description": "Only goals with this status. Omit to list every goal except archived.",
+            "description": "Only goals in these states (repeat the parameter for several). Omit to list every goal except archived ones.",
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "active",
-                    "paused",
-                    "completed",
-                    "archived"
-                  ],
-                  "type": "string"
+                  "items": {
+                    "enum": [
+                      "active",
+                      "paused",
+                      "completed",
+                      "archived"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Only goals with this status. Omit to list every goal except archived.",
+              "description": "Only goals in these states (repeat the parameter for several). Omit to list every goal except archived ones.",
               "title": "Status"
             }
           },
@@ -642,7 +1033,7 @@
         ]
       },
       "post": {
-        "description": "Creates a goal owned by the caller. The owner is never taken from the request body.",
+        "description": "Creates a goal owned by the caller. The owner is never taken from the request body.\n\nSettings left out of the body (daily minutes, languages, kinds of practice) come from the\ncaller's saved preferences.",
         "operationId": "create_goal_v1_goals_post",
         "requestBody": {
           "content": {
@@ -717,7 +1108,132 @@
         ]
       }
     },
+    "/v1/goals/summary": {
+      "get": {
+        "operationId": "goal_summary_v1_goals_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "How many goals are in each state",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/{goal_id}": {
+      "delete": {
+        "operationId": "delete_goal_v1_goals__goal_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Only archived goals can be deleted"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Permanently delete an archived goal",
+        "tags": [
+          "goals"
+        ]
+      },
       "get": {
         "operationId": "read_goal_v1_goals__goal_id__get",
         "parameters": [
@@ -793,6 +1309,202 @@
         "tags": [
           "goals"
         ]
+      },
+      "patch": {
+        "description": "Changes only the fields sent. ``null`` clears the description or the target date.",
+        "operationId": "update_goal_v1_goals__goal_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Goal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The goal is archived"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edit one of the caller's goals",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/status": {
+      "put": {
+        "description": "Moves a goal along its lifecycle. Asking for the state it is already in changes nothing.\n\nAllowed: active \u21c4 paused, active or paused \u2192 completed, completed \u2192 active (reopen),\nany open or completed goal \u2192 archived, archived \u2192 active (restore).",
+        "operationId": "change_goal_status_v1_goals__goal_id__status_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalStatusChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Goal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "That change isn't allowed from this state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pause, resume, complete, reopen, archive or restore a goal",
+        "tags": [
+          "goals"
+        ]
       }
     },
     "/v1/me": {
@@ -837,6 +1549,118 @@
           }
         ],
         "summary": "The signed-in user",
+        "tags": [
+          "me"
+        ]
+      },
+      "patch": {
+        "description": "Changes only the fields sent. Preferences pre-fill new goals; they never alter old ones.",
+        "operationId": "update_me_v1_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update the caller's profile and preferences",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/v1/me/onboarding/complete": {
+      "post": {
+        "description": "Marks onboarding as done. Calling it again is harmless; the first time is kept.",
+        "operationId": "complete_onboarding_v1_me_onboarding_complete_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Finish (or skip) onboarding",
         "tags": [
           "me"
         ]
