@@ -36,6 +36,13 @@ class JwtMode(StrEnum):
     HS256 = "hs256"  # legacy shared JWT secret; also what the local Supabase CLI stack uses
 
 
+class LlmProviderName(StrEnum):
+    """Which model provider the worker talks to. Unset means the AI features are switched off."""
+
+    GEMINI = "gemini"
+    FAKE = "fake"  # a deterministic test double; refused in staging and production
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -72,6 +79,27 @@ class Settings(BaseSettings):
 
     # --- Product limits -------------------------------------------------------------------------
     max_active_goals_per_user: int = Field(default=50, ge=1, le=1000)
+    # Roadmap generations a learner may start per rolling 24 hours (a guard against runaway cost).
+    roadmap_jobs_per_user_per_day: int = Field(default=20, ge=1, le=1000)
+
+    # --- AI provider (used by the worker; the API only checks that it is configured) -----------
+    llm_provider: LlmProviderName | None = None
+    # A secret: server-only, never logged, never sent to the browser.
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = Field(default="gemini-3.8-flash", min_length=1, max_length=100)
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    llm_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    llm_max_output_tokens: int = Field(default=24000, ge=1024, le=65536)
+    llm_temperature: float = Field(default=0.4, ge=0, le=2)
+
+    # --- Background jobs and the worker process ------------------------------------------------
+    job_max_attempts: int = Field(default=3, ge=1, le=10)
+    # How long a claimed job stays locked without a heartbeat before another worker may take it.
+    job_lease_seconds: int = Field(default=90, ge=5, le=900)
+    # First retry waits about this long; later retries double it (with jitter), capped at 5 minutes.
+    job_retry_base_seconds: float = Field(default=5.0, ge=0, le=600)
+    worker_poll_seconds: float = Field(default=2.0, gt=0, le=60)
+    worker_concurrency: int = Field(default=1, ge=1, le=8)
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
@@ -108,10 +136,23 @@ class Settings(BaseSettings):
             raise ValueError("must not include a path, query or fragment")
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    @field_validator("database_url", "supabase_jwt_secret", mode="before")
+    @field_validator("database_url", "supabase_jwt_secret", "gemini_api_key", mode="before")
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def _blank_provider_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("gemini_base_url")
+    @classmethod
+    def _validate_gemini_base_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("must look like https://generativelanguage.googleapis.com/v1beta")
+        return value.strip().rstrip("/")
 
     @field_validator("database_url")
     @classmethod
@@ -163,7 +204,18 @@ class Settings(BaseSettings):
                 )
         if self.db_pool_min_size > self.db_pool_max_size:
             raise ValueError("DB_POOL_MIN_SIZE must not exceed DB_POOL_MAX_SIZE")
+        if hardened and self.llm_provider is LlmProviderName.FAKE:
+            raise ValueError(
+                "LLM_PROVIDER=fake is a test double and is not allowed in staging or production"
+            )
         return self
+
+    @property
+    def ai_configured(self) -> bool:
+        """Whether a roadmap can be generated: a provider is chosen and has what it needs."""
+        if self.llm_provider is LlmProviderName.FAKE:
+            return True
+        return self.llm_provider is LlmProviderName.GEMINI and self.gemini_api_key is not None
 
     @property
     def docs_enabled(self) -> bool:

@@ -31,6 +31,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_JWT_MODE: ${SUPABASE_JWT_MODE:-jwks}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      # AI roadmap generation. The API only checks these are set; the worker uses them.
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -46,6 +49,28 @@ services:
       timeout: 3s
       start_period: 15s
       retries: 5
+
+  # Runs queued background jobs (roadmap generation). Same image and settings as the API.
+  worker:
+    build:
+      context: services/api
+      target: dev
+    command: ["python", "-m", "app.worker"]
+    environment:
+      APP_ENV: local
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_JWT_MODE: ${SUPABASE_JWT_MODE:-jwks}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+    volumes:
+      - ./services/api/app:/srv/api/app
+    depends_on:
+      api:
+        condition: service_healthy
 
   web:
     build:

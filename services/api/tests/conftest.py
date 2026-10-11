@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -8,11 +8,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from app.core.config import AppEnv, Settings
+from app.core.config import AppEnv, LlmProviderName, Settings
+from app.core.db import Database
 from app.main import create_app
 from support.database import create_auth_user, running_database
 from support.keys import SigningKey, build_claims, make_ec_key, sign_with_key, static_jwks_fetcher
 from support.settings import TEST_SUPABASE_URL, IsolatedSettings
+from support.worker import clear_queue, worker_settings
 
 _CONFIG_VARIABLES = (
     "APP_ENV",
@@ -32,6 +34,19 @@ _CONFIG_VARIABLES = (
     "SUPABASE_JWKS_URL",
     "JWT_LEEWAY_SECONDS",
     "MAX_ACTIVE_GOALS_PER_USER",
+    "ROADMAP_JOBS_PER_USER_PER_DAY",
+    "LLM_PROVIDER",
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "GEMINI_BASE_URL",
+    "LLM_TIMEOUT_SECONDS",
+    "LLM_MAX_OUTPUT_TOKENS",
+    "LLM_TEMPERATURE",
+    "JOB_MAX_ATTEMPTS",
+    "JOB_LEASE_SECONDS",
+    "JOB_RETRY_BASE_SECONDS",
+    "WORKER_POLL_SECONDS",
+    "WORKER_CONCURRENCY",
 )
 
 
@@ -99,6 +114,8 @@ def api_settings(database_dsn: str) -> Settings:
         database_url=SecretStr(database_dsn),
         supabase_url=TEST_SUPABASE_URL,
         db_pool_max_size=4,
+        # The built-in test provider: API tests queue jobs; tests that run them use the worker.
+        llm_provider=LlmProviderName.FAKE,
     )
 
 
@@ -139,3 +156,40 @@ def make_learner(database_dsn: str, signing_key: SigningKey) -> Callable[..., Le
         return Learner(id=user_id, email=email, token=sign_with_key(signing_key, claims))
 
     return factory
+
+
+# --- The background worker and the job queue -----------------------------------------------------
+
+
+@pytest.fixture
+async def database(database_dsn: str) -> AsyncIterator[Database]:
+    """A connection pool onto the test database, for tests that run the worker or the queue.
+
+    The queue starts empty: the database is shared by the whole session, so jobs left over from
+    other tests are cancelled first and the worker only ever picks up this test's own job.
+    """
+    clear_queue(database_dsn)
+    pool = Database.from_settings(worker_settings(database_dsn))
+    await pool.open(wait=True)
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
+@pytest.fixture
+def configure_app(
+    api_app: FastAPI, api_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> Callable[..., None]:
+    """Change the running app's settings for one test (restored afterwards)."""
+
+    def apply(**changes: object) -> None:
+        monkeypatch.setattr(api_app.state, "settings", api_settings.model_copy(update=changes))
+
+    return apply
+
+
+@pytest.fixture
+def no_ai(configure_app: Callable[..., None]) -> None:
+    """The app as deployed without an AI provider."""
+    configure_app(llm_provider=None)

@@ -94,6 +94,13 @@ class ConflictError(AppError):
     code = "CONFLICT"
 
 
+class RateLimitedError(AppError):
+    """The caller has used up an allowance (for example daily roadmap generations)."""
+
+    status_code = 429
+    code = "RATE_LIMITED"
+
+
 class InvalidRequestError(AppError):
     """A request that is well-formed but not acceptable, optionally naming the offending fields."""
 

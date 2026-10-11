@@ -37,6 +37,12 @@ log = structlog.get_logger("app.db")
 # type, so handing them an unrestricted connection is a type error.
 UserConnection = NewType("UserConnection", AsyncConnection[DictRow])
 
+# A connection with the pool's full privileges, which bypasses Row Level Security. Only the
+# background worker (``app/jobs``) may use it: it must claim jobs belonging to every user. Web
+# request code (``app/api``, ``app/services``, ``app/repositories``) never imports it; a test
+# fails the build if it does. Functions that take it filter by ``user_id`` explicitly.
+SystemConnection = NewType("SystemConnection", AsyncConnection[DictRow])
+
 _PING_TIMEOUT_SECONDS = 2.0
 
 
@@ -91,3 +97,9 @@ class Database:
                 (claims,),
             )
             yield UserConnection(connection)
+
+    @asynccontextmanager
+    async def system_session(self) -> AsyncGenerator[SystemConnection]:
+        """One transaction with full privileges. For the background worker ONLY (see above)."""
+        async with self._pool.connection() as connection, connection.transaction():
+            yield SystemConnection(connection)

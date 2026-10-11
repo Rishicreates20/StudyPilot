@@ -110,6 +110,47 @@ export interface paths {
         patch: operations["update_goal_v1_goals__goal_id__patch"];
         trace?: never;
     };
+    "/v1/goals/{goal_id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A goal's recent generation jobs, newest first */
+        get: operations["list_goal_jobs_v1_goals__goal_id__jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/roadmaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of a goal's roadmap, newest first */
+        get: operations["list_roadmaps_v1_goals__goal_id__roadmaps_get"];
+        put?: never;
+        /**
+         * Start generating a roadmap for a goal
+         * @description Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.
+         *
+         *     With `feedback`, the planner revises the current roadmap; without it, it makes a fresh plan.
+         *     Either way a NEW version is stored when the job completes: earlier versions are kept.
+         */
+        post: operations["start_roadmap_v1_goals__goal_id__roadmaps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/goals/{goal_id}/status": {
         parameters: {
             query?: never;
@@ -127,6 +168,63 @@ export interface paths {
          */
         put: operations["change_goal_status_v1_goals__goal_id__status_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The status of a generation job */
+        get: operations["read_job_v1_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for a generation to stop
+         * @description A job that hasn't started is cancelled at once; a running one stops at its next stage.
+         */
+        post: operations["cancel_job_v1_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a failed generation
+         * @description Queues a new job that repeats the failed one; the failed job stays as history.
+         */
+        post: operations["retry_job_v1_jobs__job_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -177,6 +275,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/roadmaps/{roadmap_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One roadmap version with its modules, topics and schedule */
+        get: operations["read_roadmap_v1_roadmaps__roadmap_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmaps/{roadmap_id}/make-current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make this version the goal's current roadmap
+         * @description Switches versions without deleting anything. Not allowed while the goal is archived.
+         */
+        post: operations["make_roadmap_current_v1_roadmaps__roadmap_id__make_current_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -189,6 +324,54 @@ export interface components {
             field: string;
             /** Message */
             message: string;
+        };
+        /** GenerationJob */
+        GenerationJob: {
+            /** Attempts */
+            attempts: number;
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Job Type
+             * @constant
+             */
+            job_type: "roadmap";
+            /** Max Attempts */
+            max_attempts: number;
+            /** Progress */
+            progress: number;
+            /** Roadmap Id */
+            roadmap_id: string | null;
+            /** Stage */
+            stage: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "failed" | "cancelled";
         };
         /** Goal */
         Goal: {
@@ -340,6 +523,11 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** JobList */
+        JobList: {
+            /** Items */
+            items: components["schemas"]["GenerationJob"][];
+        };
         /**
          * Me
          * @description The signed-in user. ``email`` comes from the verified token; the rest from ``profiles``.
@@ -385,6 +573,13 @@ export interface components {
             /** Timezone */
             timezone?: string | null;
         };
+        /** Objective */
+        Objective: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+        };
         /**
          * Preferences
          * @description Saved choices that pre-fill new goals. Each goal can still override them.
@@ -428,6 +623,187 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "unavailable";
+        };
+        /** Roadmap */
+        Roadmap: {
+            /** Assumptions */
+            assumptions: string[];
+            /** Based On Roadmap Id */
+            based_on_roadmap_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Daily Minutes */
+            daily_minutes: number;
+            /** Enrichment */
+            enrichment: components["schemas"]["RoadmapItem"][];
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /** Language */
+            language: string;
+            /** Modules */
+            modules: components["schemas"]["RoadmapModule"][];
+            /** Objectives */
+            objectives: components["schemas"]["Objective"][];
+            /** Overview */
+            overview: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Revision Feedback */
+            revision_feedback: string | null;
+            /** Revision Sessions */
+            revision_sessions: components["schemas"]["RoadmapItem"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "superseded";
+            /**
+             * Syllabus Basis
+             * @enum {string}
+             */
+            syllabus_basis: "learner_stated" | "uploaded_document" | "general_knowledge";
+            /** Target Date */
+            target_date: string | null;
+            /** Target Outcome */
+            target_outcome: string;
+            /** Title */
+            title: string;
+            /** Topic Count */
+            topic_count: number;
+            /** Total Days */
+            total_days: number;
+            /** Total Minutes */
+            total_minutes: number;
+            /** Unknowns */
+            unknowns: string[];
+            /** Version */
+            version: number;
+        };
+        /**
+         * RoadmapItem
+         * @description A topic, a revision session or an optional enrichment topic.
+         */
+        RoadmapItem: {
+            /** Day Number */
+            day_number: number | null;
+            /** Description */
+            description: string;
+            /** Estimated Minutes */
+            estimated_minutes: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "revision" | "enrichment";
+            /** Objective Ids */
+            objective_ids: string[];
+            /** Position */
+            position: number;
+            /** Practice Task */
+            practice_task: string | null;
+            /** Prerequisite Ids */
+            prerequisite_ids: string[];
+            /** Title */
+            title: string;
+        };
+        /** RoadmapList */
+        RoadmapList: {
+            /** Current Id */
+            current_id: string | null;
+            /** Items */
+            items: components["schemas"]["RoadmapSummary"][];
+        };
+        /** RoadmapModule */
+        RoadmapModule: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Topics */
+            topics: components["schemas"]["RoadmapItem"][];
+        };
+        /**
+         * RoadmapRequest
+         * @description Start generating a roadmap, optionally asking for changes to the current one.
+         */
+        RoadmapRequest: {
+            /**
+             * Feedback
+             * @description What to change about the current roadmap (for example 'fewer topics, more practice'). Leave out to generate a fresh plan.
+             */
+            feedback?: string | null;
+        };
+        /** RoadmapSummary */
+        RoadmapSummary: {
+            /** Based On Roadmap Id */
+            based_on_roadmap_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Daily Minutes */
+            daily_minutes: number;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /** Language */
+            language: string;
+            /** Revision Feedback */
+            revision_feedback: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "current" | "superseded";
+            /** Target Date */
+            target_date: string | null;
+            /** Title */
+            title: string;
+            /** Topic Count */
+            topic_count: number;
+            /** Total Days */
+            total_days: number;
+            /** Total Minutes */
+            total_minutes: number;
+            /** Version */
+            version: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -845,6 +1221,207 @@ export interface operations {
             };
         };
     };
+    list_goal_jobs_v1_goals__goal_id__jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_roadmaps_v1_goals__goal_id__roadmaps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_roadmap_v1_goals__goal_id__roadmaps_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a form: you get the same job back. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal can't be planned yet */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Daily generation allowance used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description AI generation isn't configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     change_goal_status_v1_goals__goal_id__status_put: {
         parameters: {
             query?: never;
@@ -888,6 +1465,189 @@ export interface operations {
                 };
             };
             /** @description That change isn't allowed from this state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_job_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    cancel_job_v1_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    retry_job_v1_jobs__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1030,6 +1790,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_roadmap_v1_roadmaps__roadmap_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roadmap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Roadmap"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    make_roadmap_current_v1_roadmaps__roadmap_id__make_current_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roadmap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapSummary"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description A dependency is temporarily unavailable */

@@ -38,10 +38,11 @@ from fastapi.testclient import TestClient
 from psycopg.rows import DictRow, dict_row
 from pydantic import SecretStr
 
-from app.core.config import AppEnv, JwtMode, Settings
+from app.core.config import AppEnv, JwtMode, LlmProviderName, Settings
 from app.main import create_app
 from conftest import new_client
 from support.settings import IsolatedSettings
+from support.worker import clear_queue, run_worker_once
 
 STACK_URL = os.environ.get("SUPABASE_STACK_URL", "").rstrip("/")
 PUBLISHABLE_KEY = os.environ.get("SUPABASE_STACK_PUBLISHABLE_KEY", "")
@@ -131,6 +132,7 @@ def settings(signing_algorithm: str) -> Settings:
             supabase_jwt_mode=JwtMode.HS256,
             supabase_jwt_secret=SecretStr(JWT_SECRET),
             db_pool_max_size=4,
+            llm_provider=LlmProviderName.FAKE,
         )
     return IsolatedSettings(
         app_env=AppEnv.TEST,
@@ -138,6 +140,7 @@ def settings(signing_algorithm: str) -> Settings:
         supabase_url=STACK_URL,
         supabase_jwt_mode=JwtMode.JWKS,
         db_pool_max_size=4,
+        llm_provider=LlmProviderName.FAKE,
     )
 
 
@@ -605,4 +608,115 @@ def test_one_learners_preferences_never_reach_another(
     assert (
         api.get("/v1/me", headers=grace.headers).json()["preferences"]["default_daily_minutes"]
         == 60
+    )
+
+
+# --- Jobs and roadmaps under Supabase's real roles ------------------------------------------------
+
+
+def generate_roadmap(api: TestClient, account: Account, goal_id: str) -> dict[str, Any]:
+    """Queue a generation through the API and run it with the real worker (built-in provider)."""
+    clear_queue(DB_URL)
+    started = api.post(f"/v1/goals/{goal_id}/roadmaps", headers=account.headers, json={})
+    assert started.status_code == 202, started.text
+    assert run_worker_once(DB_URL) is True
+    job = api.get(f"/v1/jobs/{started.json()['id']}", headers=account.headers).json()
+    assert job["status"] == "completed", job
+    return job
+
+
+def test_a_roadmap_is_generated_stored_and_private_to_its_owner(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    goal = create_goal(api, ada, "Learn graph algorithms")
+
+    job = generate_roadmap(api, ada, goal["id"])
+
+    roadmap = api.get(f"/v1/roadmaps/{job['roadmap_id']}", headers=ada.headers)
+    assert roadmap.status_code == 200, roadmap.text
+    assert roadmap.json()["version"] == 1 and roadmap.json()["status"] == "current"
+    assert roadmap.json()["modules"] and roadmap.json()["is_synthetic"] is True
+    for path in (
+        f"/v1/roadmaps/{job['roadmap_id']}",
+        f"/v1/jobs/{job['id']}",
+        f"/v1/goals/{goal['id']}/roadmaps",
+    ):
+        assert api.get(path, headers=grace.headers).status_code == 404, path
+    assert (
+        api.post(f"/v1/goals/{goal['id']}/roadmaps", headers=grace.headers, json={}).status_code
+        == 404
+    )
+
+
+def test_versions_are_kept_and_switchable_under_the_real_roles(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada = sign_up()
+    goal = create_goal(api, ada, "Learn compilers")
+    first = generate_roadmap(api, ada, goal["id"])
+    second = generate_roadmap(api, ada, goal["id"])
+
+    switched = api.post(f"/v1/roadmaps/{first['roadmap_id']}/make-current", headers=ada.headers)
+
+    assert switched.status_code == 200, switched.text
+    listing = api.get(f"/v1/goals/{goal['id']}/roadmaps", headers=ada.headers).json()
+    assert listing["current_id"] == first["roadmap_id"]
+    assert {v["id"]: v["status"] for v in listing["items"]} == {
+        first["roadmap_id"]: "current",
+        second["roadmap_id"]: "superseded",
+    }
+
+
+def test_the_real_roles_cannot_write_plans_or_job_state_directly(
+    api: TestClient,
+    database: psycopg.Connection[DictRow],
+    sign_up: Callable[..., Account],
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    goal = create_goal(api, ada, "Learn operating systems")
+    job = generate_roadmap(api, ada, goal["id"])
+
+    for statement in (
+        "update public.roadmaps set title = 'Rewritten'",
+        "delete from public.roadmaps",
+        "update public.roadmap_items set title = 'Rewritten'",
+        "update public.generation_jobs set status = 'completed'",
+        "delete from public.generation_jobs",
+        "insert into public.ai_usage_events (user_id, job_id, purpose, provider, prompt_version)"
+        " select user_id, id, 'x', 'fake', 'v' from public.generation_jobs",
+    ):
+        with database.transaction(force_rollback=True):
+            _act_as(database, "authenticated", ada.id)
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                database.execute(statement)  # type: ignore[arg-type]
+
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", grace.id)
+        for table in ("roadmaps", "roadmap_modules", "roadmap_items", "generation_jobs"):
+            rows = database.execute(f"select 1 from public.{table}").fetchall()  # type: ignore[arg-type]  # noqa: S608
+            assert rows == [], table
+    for table in ("roadmaps", "roadmap_modules", "roadmap_items", "generation_jobs"):
+        allowed = database.execute(
+            "select has_table_privilege('anon', %s, 'select') as ok", (f"public.{table}",)
+        ).fetchone()
+        assert allowed is not None and allowed["ok"] is False, f"anon can read {table}"
+    assert job["roadmap_id"]
+
+
+def test_a_queued_job_can_be_cancelled_under_the_real_roles(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada = sign_up()
+    goal = create_goal(api, ada, "Learn databases")
+    clear_queue(DB_URL)
+    job = api.post(f"/v1/goals/{goal['id']}/roadmaps", headers=ada.headers, json={}).json()
+
+    cancelled = api.post(f"/v1/jobs/{job['id']}/cancel", headers=ada.headers)
+
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+    assert (
+        api.post(f"/v1/goals/{goal['id']}/roadmaps", headers=ada.headers, json={}).status_code
+        == 202
     )

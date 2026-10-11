@@ -14,6 +14,7 @@
   "scripts": {
     "dev:web": "npm run dev --workspace @studypilot/web",
     "dev:api": "uv run --directory services/api python -m uvicorn app.main:create_app --factory --loop asyncio:SelectorEventLoop --reload --port 8000 --no-access-log",
+    "dev:worker": "uv run --directory services/api python -m app.worker",
     "lint": "npm run lint:web && npm run lint:api",
     "lint:web": "npm run lint --workspace @studypilot/web",
     "lint:api": "uv run --directory services/api python -m ruff check .",
