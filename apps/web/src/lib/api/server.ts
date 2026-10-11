@@ -20,6 +20,14 @@ export type GoalStatus = Goal["status"];
 export type Me = components["schemas"]["Me"];
 export type MeUpdate = components["schemas"]["MeUpdate"];
 export type Preferences = components["schemas"]["Preferences"];
+export type GenerationJob = components["schemas"]["GenerationJob"];
+export type JobList = components["schemas"]["JobList"];
+export type Roadmap = components["schemas"]["Roadmap"];
+export type RoadmapSummary = components["schemas"]["RoadmapSummary"];
+export type RoadmapList = components["schemas"]["RoadmapList"];
+export type RoadmapItem = components["schemas"]["RoadmapItem"];
+export type RoadmapModule = components["schemas"]["RoadmapModule"];
+export type JobStatus = GenerationJob["status"];
 type ProblemDetail = components["schemas"]["ProblemDetail"];
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -165,5 +173,66 @@ export function setGoalStatus(
 export function deleteGoal(accessToken: string, goalId: string): Promise<void> {
   return callWithoutBody(() =>
     client(accessToken).DELETE("/v1/goals/{goal_id}", { params: { path: { goal_id: goalId } } }),
+  );
+}
+
+/** Queue a roadmap generation. The answer is the job (202); the plan arrives later. */
+export function startRoadmap(
+  accessToken: string,
+  goalId: string,
+  body: { feedback?: string | null } = {},
+): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/goals/{goal_id}/roadmaps", {
+      params: { path: { goal_id: goalId } },
+      body,
+    }),
+  );
+}
+
+export function fetchRoadmaps(accessToken: string, goalId: string): Promise<RoadmapList> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/roadmaps", {
+      params: { path: { goal_id: goalId } },
+    }),
+  );
+}
+
+export function fetchGoalJobs(accessToken: string, goalId: string, limit = 5): Promise<JobList> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/jobs", {
+      params: { path: { goal_id: goalId }, query: { limit } },
+    }),
+  );
+}
+
+export function fetchRoadmap(accessToken: string, roadmapId: string): Promise<Roadmap> {
+  return call(() =>
+    client(accessToken).GET("/v1/roadmaps/{roadmap_id}", {
+      params: { path: { roadmap_id: roadmapId } },
+    }),
+  );
+}
+
+export function makeRoadmapCurrent(
+  accessToken: string,
+  roadmapId: string,
+): Promise<RoadmapSummary> {
+  return call(() =>
+    client(accessToken).POST("/v1/roadmaps/{roadmap_id}/make-current", {
+      params: { path: { roadmap_id: roadmapId } },
+    }),
+  );
+}
+
+export function cancelJob(accessToken: string, jobId: string): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/jobs/{job_id}/cancel", { params: { path: { job_id: jobId } } }),
+  );
+}
+
+export function retryJob(accessToken: string, jobId: string): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/jobs/{job_id}/retry", { params: { path: { job_id: jobId } } }),
   );
 }

@@ -42,6 +42,42 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Onboarding skipped",
     message: "You can set your preferences in Settings and create a goal whenever you like.",
   },
+  "already-generating": {
+    variant: "info",
+    title: "A roadmap is already being made for this goal",
+    message: "Its progress is shown below.",
+  },
+  "generation-cancelled": {
+    variant: "info",
+    title: "Generation cancelled",
+    message: "Nothing was saved. You can start again whenever you like.",
+  },
+  "version-switched": {
+    variant: "success",
+    title: "Version switched",
+    message: "This is now your current roadmap. Nothing was deleted: every version is kept.",
+  },
+  "needs-detail": {
+    variant: "warning",
+    title: "This goal needs a little more before it can be planned",
+    message:
+      "Give it a more descriptive title, or allow more study time before the target date, then try again.",
+  },
+  "ai-unavailable": {
+    variant: "warning",
+    title: "Roadmap generation isn't set up yet",
+    message: "This server has no AI provider configured, so nothing was started.",
+  },
+  "generation-limit": {
+    variant: "warning",
+    title: "Daily roadmap limit reached",
+    message: "You have used today's roadmap generations. Please try again tomorrow.",
+  },
+  "goal-archived": {
+    variant: "warning",
+    title: "Restore the goal first",
+    message: "An archived goal is read-only, so its roadmap can't be changed.",
+  },
   "status-conflict": {
     variant: "warning",
     title: "That change isn't possible right now",

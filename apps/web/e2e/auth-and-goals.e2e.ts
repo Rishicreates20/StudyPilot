@@ -6,8 +6,13 @@ import { expect, test, type Browser, type BrowserContext, type Page } from "@pla
  * The acceptance scenario, in a real browser against real Supabase Auth and the real API:
  *
  *   sign up → onboarding → a goal on the dashboard → edit → reload and it is still there →
- *   settings persist → pause / complete / archive / restore / delete (with confirmations) →
+ *   generate a roadmap in the background → it persists, respects the daily minutes and can be
+ *   revised into a new version without losing the old one → settings persist →
+ *   pause / complete / archive / restore / delete (with confirmations) →
  *   sign out → sign back in → another user can see and change none of it.
+ *
+ * Roadmaps are produced by the real API and the real worker process; the worker uses the built-in
+ * test provider (LLM_PROVIDER=fake), which labels every plan as a sample. No model is called.
  *
  * Nothing here fakes a session: every cookie is set by Supabase through the app. The one place a
  * test reads the session is to prove a *different* account's real token cannot touch these goals.
@@ -68,6 +73,13 @@ async function openGoal(page: Page, title: string) {
   await page.getByRole("link", { name: title }).click();
   await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
   return page.url().split("/goals/")[1] ?? "";
+}
+
+/** On a goal page with no roadmap: ask for one and wait for the worker to finish it. */
+async function generateRoadmap(page: Page) {
+  await page.getByRole("button", { name: "Generate roadmap" }).click();
+  // The job is queued and a worker runs it; the page follows its progress by itself.
+  await expect(page.getByRole("link", { name: /View roadmap/ })).toBeVisible({ timeout: 45_000 });
 }
 
 /** The access token of the signed-in browser context, read from Supabase's session cookie. */
@@ -227,6 +239,91 @@ test.describe("onboarding, goals and the dashboard", () => {
     await expect(page.getByText("30 minutes")).toBeVisible();
   });
 
+  test("a roadmap is generated in the background and is still there after a reload", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText("Turn this goal into a study plan")).toBeVisible();
+
+    await generateRoadmap(page);
+    await expect(page.getByText("Version 1 of 1")).toBeVisible();
+
+    await page.getByRole("link", { name: /View roadmap/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/roadmap$`));
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(renamedGoal);
+    await expect(
+      page.getByText("This roadmap came from the built-in test provider, not an AI model."),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Modules and topics" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "By the end you will be able to" }),
+    ).toBeVisible();
+    await expect(page.getByText(/not an official syllabus/)).toBeVisible();
+
+    // Reopening the app later: the plan comes back from the database.
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(renamedGoal);
+    await expect(page.getByRole("heading", { name: "Modules and topics" })).toBeVisible();
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText("Version 1 of 1")).toBeVisible();
+  });
+
+  test("the stored schedule never asks for more than the daily minutes", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+
+    await page.getByText(/Day-by-day schedule/).click();
+    const days = await page.locator("details ol > li > p").allInnerTexts();
+
+    expect(days.length).toBeGreaterThan(0);
+    for (const day of days) {
+      const minutes = /(\d+) min/.exec(day);
+      expect(minutes, `"${day}" should be a number of minutes under an hour`).not.toBeNull();
+      expect(Number(minutes?.[1])).toBeLessThanOrEqual(30); // the goal was edited to 30 a day
+    }
+  });
+
+  test("a revision adds version 2, keeps version 1, and either can be made current", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+
+    await page.getByRole("button", { name: "Revise or regenerate" }).click();
+    const dialog = page.getByRole("dialog", { name: "Make a new version" });
+    await expect(dialog.getByText(/every earlier version stay available/)).toBeVisible();
+    await dialog.getByLabel(/What should change/).fill("Fewer topics, more practice");
+    await dialog.getByRole("button", { name: "Create new version" }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}$`));
+    await expect(page.getByText("Version 2 of 2")).toBeVisible({ timeout: 45_000 });
+
+    await page.getByRole("link", { name: /View roadmap/ }).click();
+    const versions = page.getByRole("region", { name: "Versions" });
+    await expect(versions.getByText(/Asked for: “Fewer topics, more practice”/)).toBeVisible();
+
+    // Version 1 is still there, unchanged, and can be made current again.
+    await versions.getByRole("link", { name: "Version 1" }).click();
+    await expect(page).toHaveURL(/\?version=1$/);
+    await expect(page.getByText("Earlier version", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Make this version current" }).click();
+
+    await expect(page).toHaveURL(/\/roadmap\?notice=version-switched$/);
+    await expect(page.getByText("Nothing was deleted: every version is kept.")).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Versions" }).getByRole("link", { name: "Version 2" }),
+    ).toBeVisible();
+  });
+
+  test("an unknown roadmap version is simply not found", async ({ page }) => {
+    await signIn(page, ada);
+
+    await page.goto(`/goals/${firstGoalId}/roadmap?version=99`);
+
+    await expect(page.getByText("We couldn't find that")).toBeVisible();
+  });
+
   test("a goal can be paused, resumed, completed and reopened", async ({ page }) => {
     await signIn(page, ada);
     await page.goto(`/goals/${firstGoalId}`);
@@ -283,6 +380,28 @@ test.describe("onboarding, goals and the dashboard", () => {
     await page.getByRole("button", { name: "Restore" }).click();
     await expect(page.getByText("This goal is active again")).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+  });
+
+  test("an archived goal's roadmap can be read but not changed", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}`);
+    await page.getByRole("button", { name: "Archive" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Archive goal" }).click();
+    await expect(page).toHaveURL(/\/dashboard\?notice=archived$/);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByRole("link", { name: /View roadmap/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Revise or regenerate" })).toHaveCount(0);
+
+    await page.goto(`/goals/${firstGoalId}/roadmap`);
+    await expect(page.getByText(/its roadmap is read-only/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Revise or regenerate" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Make current" })).toHaveCount(0);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await page.getByRole("button", { name: "Restore" }).click();
+    await expect(page.getByText("This goal is active again")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Revise or regenerate" })).toBeVisible();
   });
 
   test("only an archived goal can be deleted, after a warning, and then it is gone", async ({
@@ -364,10 +483,23 @@ test.describe("onboarding, goals and the dashboard", () => {
   test.describe("another user", () => {
     const grace = newLearner("grace");
     let adasGoalId = "";
+    let adasRoadmapId = "";
+    let adasJobId = "";
 
     test("sees none of Ada's goals and starts from a clean slate", async ({ browser, page }) => {
       await signIn(page, ada);
       adasGoalId = await openGoal(page, secondGoal);
+      await generateRoadmap(page); // her second goal has a target date, so the plan must fit it
+      const adasToken = await accessTokenOf(page.context());
+      const roadmaps = await page.request.get(`${API_URL}/v1/goals/${adasGoalId}/roadmaps`, {
+        headers: bearer(adasToken),
+      });
+      adasRoadmapId = (await roadmaps.json()).current_id;
+      const jobs = await page.request.get(`${API_URL}/v1/goals/${adasGoalId}/jobs`, {
+        headers: bearer(adasToken),
+      });
+      adasJobId = (await jobs.json()).items[0].id;
+      expect(adasRoadmapId).toBeTruthy();
 
       const other = await freshContext(browser);
       try {
@@ -381,6 +513,8 @@ test.describe("onboarding, goals and the dashboard", () => {
         await other.page.goto(`/goals/${adasGoalId}`);
         await expect(other.page.getByText("We couldn't find that")).toBeVisible();
         await other.page.goto(`/goals/${adasGoalId}/edit`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+        await other.page.goto(`/goals/${adasGoalId}/roadmap`);
         await expect(other.page.getByText("We couldn't find that")).toBeVisible();
       } finally {
         await other.context.close();
@@ -413,6 +547,20 @@ test.describe("onboarding, goals and the dashboard", () => {
         expect([read.status(), edit.status(), move.status(), remove.status()]).toEqual([
           404, 404, 404, 404,
         ]);
+
+        // The same goes for the roadmap and the job behind it.
+        const roadmapUrl = `${API_URL}/v1/roadmaps/${adasRoadmapId}`;
+        const attempts = [
+          await request.get(roadmapUrl, { headers: bearer(token) }),
+          await request.post(`${roadmapUrl}/make-current`, { headers: bearer(token) }),
+          await request.get(`${API_URL}/v1/jobs/${adasJobId}`, { headers: bearer(token) }),
+          await request.post(`${API_URL}/v1/jobs/${adasJobId}/cancel`, { headers: bearer(token) }),
+          await request.get(`${goalUrl}/roadmaps`, { headers: bearer(token) }),
+          await request.post(`${goalUrl}/roadmaps`, { headers: bearer(token), data: {} }),
+        ];
+        expect(attempts.map((response) => response.status())).toEqual([
+          404, 404, 404, 404, 404, 404,
+        ]);
         expect((await mine.json()).items).toEqual([]);
       } finally {
         await other.context.close();
@@ -425,6 +573,7 @@ test.describe("onboarding, goals and the dashboard", () => {
       await page.goto(`/goals/${adasGoalId}`);
       await expect(page.getByRole("heading", { level: 1, name: secondGoal })).toBeVisible();
       await expect(page.getByText("Active", { exact: true })).toBeVisible();
+      await expect(page.getByText("Version 1 of 1")).toBeVisible(); // and so is her roadmap
     });
   });
 });
