@@ -178,9 +178,9 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `MAX_ACTIVE_GOALS_PER_USER` | No | No | `50` | Per-user cap; the 51st goal gets a 409 |
 | `LLM_PROVIDER` | For roadmaps | No | empty (AI off) | `gemini` or `fake`. Empty: "Generate roadmap" answers that AI isn't set up and queues nothing. `fake` is a labelled stand-in for local development and tests; the API refuses to start with it in staging or production. |
 | `GEMINI_API_KEY` | `gemini` only | **Yes** | — | From Google AI Studio. Server-only: sent to Google in a request header, never logged, never returned. Set it in `services/api/.env` yourself; never paste it into chat or a tracked file. |
-| `GEMINI_MODEL` | No | No | `gemini-3.8-flash` | Planning model. Check Google's current model list before changing it. |
+| `GEMINI_MODEL` | No | No | `gemini-3.6-flash` | Planning model. Measured on one roadmap request: `gemini-3.5-flash-lite` 6 s (thinner plans), `gemini-3.6-flash` 18 s, `gemini-3.8-flash` 96 s and sometimes "high demand". Check Google's current list before changing it. |
 | `GEMINI_BASE_URL` | No | No | `https://generativelanguage.googleapis.com/v1beta` | Only for tests and proxies |
-| `LLM_TIMEOUT_SECONDS` / `LLM_MAX_OUTPUT_TOKENS` / `LLM_TEMPERATURE` | No | No | `120` / `24000` / `0.4` | Per-call limits |
+| `LLM_TIMEOUT_SECONDS` / `LLM_MAX_OUTPUT_TOKENS` / `LLM_TEMPERATURE` | No | No | `180` / `24000` / `0.4` | Per-call limits |
 | `JOB_MAX_ATTEMPTS` | No | No | `3` | Tries per job; only transient failures are retried |
 | `JOB_LEASE_SECONDS` | No | No | `90` | How long a claimed job stays locked without a heartbeat (5–900) |
 | `JOB_RETRY_BASE_SECONDS` | No | No | `5` | First retry delay; later ones double, with jitter, up to 5 minutes |

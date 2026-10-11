@@ -9,7 +9,10 @@ the reduced schema leaves out.
 
 from typing import Any, cast
 
-# Documented as supported by Gemini structured output (checked 2026-10-11).
+# Documented as supported by Gemini structured output (checked 2026-10-11), minus `maxItems`:
+# the live API answered a bare "400 Request contains an invalid argument" for the roadmap
+# schema until `maxItems` was removed (bisected with the owner's key; every other keyword
+# here is accepted). The limit is still enforced after the reply by the Pydantic model.
 _KEPT_KEYWORDS = frozenset(
     {
         "type",
@@ -20,7 +23,6 @@ _KEPT_KEYWORDS = frozenset(
         "minimum",
         "maximum",
         "minItems",
-        "maxItems",
         "description",
     }
 )

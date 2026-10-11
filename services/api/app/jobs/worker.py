@@ -42,11 +42,18 @@ class Worker:
 
     async def run(self, stop: asyncio.Event) -> None:
         """Process jobs until ``stop`` is set; jobs already running are allowed to finish."""
+        provider = self.env.provider
         log.info(
             "worker.started",
             worker_id=self.env.worker_id,
             concurrency=self.env.settings.worker_concurrency,
-            ai_configured=self.env.provider is not None,
+            ai_configured=provider is not None,
+            # Which model a job will really use: never ambiguous when two workers or two .env
+            # files are around (the key itself is never logged).
+            ai_provider=provider.name if provider else None,
+            ai_model=self.env.settings.gemini_model
+            if provider and provider.name == "gemini"
+            else None,
         )
         tasks = [
             asyncio.create_task(self._consume(stop))

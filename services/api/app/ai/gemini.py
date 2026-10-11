@@ -1,11 +1,15 @@
 """Google Gemini over its REST API (``models.generateContent``).
 
-Written against Google's published reference, checked 2026-10-11:
+Written against Google's published reference and then corrected against the live API
+(2026-10-11):
 
 * ``POST {base}/models/{model}:generateContent`` with the key in the ``x-goog-api-key`` header
   (never in the URL, so it cannot end up in a log line);
-* structured output is requested with ``generationConfig.responseFormat.text`` =
-  ``{"mimeType": "application/json", "schema": {...}}``;
+* structured output is requested with ``generationConfig.responseMimeType = "application/json"``
+  and ``generationConfig.responseJsonSchema = {...}``. Google's docs page also shows a
+  ``responseFormat.text.mimeType`` shape, but the live API rejected it ("Invalid value at
+  generation_config.response_format.text.mime_type") while accepting these two fields, so these
+  are what is used;
 * the answer is ``candidates[0].content.parts[*].text`` and token counts are in ``usageMetadata``.
 
 No SDK is used: the REST surface is small, stable and easy to test with a mock transport, and it
@@ -75,9 +79,8 @@ class GeminiProvider:
             "generationConfig": {
                 "temperature": self._temperature,
                 "maxOutputTokens": self._max_output_tokens,
-                "responseFormat": {
-                    "text": {"mimeType": "application/json", "schema": provider_schema(schema)}
-                },
+                "responseMimeType": "application/json",
+                "responseJsonSchema": provider_schema(schema),
             },
         }
         started = time.monotonic()

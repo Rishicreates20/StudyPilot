@@ -84,7 +84,7 @@ async def call(handler: Handler) -> Answer:
 # --- The request -----------------------------------------------------------------------------
 
 
-async def test_the_request_follows_the_documented_shape() -> None:
+async def test_the_request_has_the_shape_the_live_api_accepts() -> None:
     seen: list[httpx2.Request] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -102,10 +102,12 @@ async def test_the_request_follows_the_documented_shape() -> None:
     config = body["generationConfig"]
     assert config["maxOutputTokens"] == 1234
     assert config["temperature"] == 0.25
-    fmt = config["responseFormat"]["text"]
-    assert fmt["mimeType"] == "application/json"
-    assert fmt["schema"]["properties"]["count"] == {"type": "integer", "minimum": 1}
-    assert fmt["schema"]["required"] == ["name", "count"]
+    # The two fields the live API accepts (the docs' "responseFormat" shape is rejected by it).
+    assert config["responseMimeType"] == "application/json"
+    assert "responseFormat" not in config
+    schema = config["responseJsonSchema"]
+    assert schema["properties"]["count"] == {"type": "integer", "minimum": 1}
+    assert schema["required"] == ["name", "count"]
 
 
 async def test_the_api_key_travels_in_a_header_and_never_in_the_url_or_body() -> None:

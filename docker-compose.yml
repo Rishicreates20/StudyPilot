@@ -65,7 +65,7 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
     volumes:
       - ./services/api/app:/srv/api/app
     depends_on:

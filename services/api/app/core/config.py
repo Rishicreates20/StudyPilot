@@ -86,9 +86,11 @@ class Settings(BaseSettings):
     llm_provider: LlmProviderName | None = None
     # A secret: server-only, never logged, never sent to the browser.
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = Field(default="gemini-3.8-flash", min_length=1, max_length=100)
+    # Measured on the owner's key (2026-10-11), same roadmap request: gemini-3.5-flash-lite 6 s,
+    # gemini-3.6-flash 18 s, gemini-3.8-flash 96 s (and "high demand" 503s at other times).
+    gemini_model: str = Field(default="gemini-3.6-flash", min_length=1, max_length=100)
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    llm_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    llm_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     llm_max_output_tokens: int = Field(default=24000, ge=1024, le=65536)
     llm_temperature: float = Field(default=0.4, ge=0, le=2)
 

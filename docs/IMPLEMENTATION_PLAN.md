@@ -7,7 +7,7 @@
 | **Related** | [PRD.md](PRD.md) · [ARCHITECTURE.md](ARCHITECTURE.md) |
 
 **Done:** M1 (foundation, Supabase auth and database, protected goals API, sign-up/sign-in/dashboard), the product half of M2 (onboarding, goal management, settings; §4.5) and the roadmap slice of M3 (job queue, worker, `LLMProvider` + Gemini, planner, versioned roadmaps and UI; §4.6).
-**Next action:** configure the AI key and verify one live Gemini call (§4.6 status notes), then — only when asked — **Milestone 4, lessons** (§5). Still open: the *deployment* half of M2 (Vercel, Render, a staging Supabase project; needs the owner's accounts) and the rest of M3 (OpenAI adapter, cost budgets).
+**Next action:** read a few real plans for quality, then — only when asked — **Milestone 4, lessons** (§5). Still open: the *deployment* half of M2 (Vercel, Render, a staging Supabase project; needs the owner's accounts) and the rest of M3 (OpenAI adapter, cost budgets).
 
 ---
 
@@ -181,8 +181,8 @@ Sizing is relative, not a calendar promise: M1 is the largest "setup" milestone;
 | Database rules, queue concurrency, recovery, retries, versions, ownership | ✅ observed locally against PostgreSQL 16 |
 | The jobs and roadmaps migration and the new database, queue and API behaviour under Supabase's own roles | ✅ CI run 38115233920 (commit 287ba01): all five jobs passed, including `supabase-stack` with the four new roadmap tests |
 | The browser journey (generate, revise, switch, archive) against genuine Supabase Auth | ⏳ the CI run for the web commit that follows (locally the journey ran against the stand-in; the stack tests were also smoke-run against it: 24 of 25 passed, the one failure being a genuine-Auth sign-out test the stand-in cannot imitate) |
-| **A live Gemini call** | ⏳ **not done**: the adapter follows Google's published REST reference (read 2026-10-11) and is tested against a mock transport only. Run `uv run --directory services/api python -m scripts.llm_smoke` after setting `GEMINI_API_KEY`; if Google rejects the request shape or model name, the report names the error code. The default model `gemini-3.8-flash` comes from Google's model list and may need changing. |
-| Quality of real plans (topic choice, pacing, language) | ⏳ unknown until a real model has been run and a person has read the results |
+| **A live Gemini call** | ✅ **observed on 2026-10-11** with the owner's key through the real planner (`scripts.llm_smoke`): a valid plan on the first attempt with `gemini-3.5-flash-lite` (6 s), `gemini-3.6-flash` (18 s) and `gemini-3.8-flash` (96 s). Two things were found only by calling the live API and fixed: the docs' `responseFormat` request shape is rejected (the adapter now sends `responseMimeType` + `responseJsonSchema`), and a schema containing `maxItems` gets a bare 400 (it is no longer sent). The default model is `gemini-3.6-flash`. |
+| Quality of real plans (topic choice, pacing, language) | ⏳ a real plan validates against every rule, but a person has not yet read one for quality, and only English was tried |
 
 *Deliberate choices:* the AI is called only by the worker, never inside a web request; the new version becomes current at once (history one click away) instead of waiting for approval; a learner's revision note is data inside the fence, not an instruction; revision sessions use the prerequisites table (they "need" the topics they revisit); optional enrichment has no day.
 

@@ -76,7 +76,7 @@ def test_the_model_base_url_must_be_a_url() -> None:
 def test_job_and_provider_defaults_are_sensible() -> None:
     settings = valid_local_settings()
 
-    assert settings.gemini_model == "gemini-3.8-flash"
+    assert settings.gemini_model == "gemini-3.6-flash"
     assert settings.job_max_attempts == 3
     assert settings.worker_concurrency == 1
     assert settings.roadmap_jobs_per_user_per_day >= 1

@@ -17,7 +17,6 @@ SUPPORTED = {
     "minimum",
     "maximum",
     "minItems",
-    "maxItems",
     "description",
 }
 
@@ -93,3 +92,16 @@ def test_literals_become_enums() -> None:
 
     assert schema["properties"]["basis"]["enum"] == ["a", "b"]
     assert schema["properties"]["fixed"]["enum"] == ["only"]
+
+
+def test_array_size_limits_are_not_sent_because_the_live_api_rejects_them() -> None:
+    """Gemini answered a bare 400 for the roadmap schema until ``maxItems`` was dropped."""
+
+    class Sample(BaseModel):
+        items: list[str] = Field(min_length=1, max_length=3)
+
+    schema = provider_schema(Sample)
+
+    assert "maxItems" not in all_keywords(schema)
+    assert schema["properties"]["items"]["minItems"] == 1
+    assert "maxItems" not in json.dumps(provider_schema(PlannedRoadmap))
