@@ -615,12 +615,21 @@ def test_one_learners_preferences_never_reach_another(
 
 
 def generate_roadmap(api: TestClient, account: Account, goal_id: str) -> dict[str, Any]:
-    """Queue a generation through the API and run it with the real worker (built-in provider)."""
+    """Queue a generation through the API and see it through (built-in provider).
+
+    The real worker runs it here; if another worker happens to be running too and gets there
+    first, the job still completes, so the test waits for the outcome rather than for its own run.
+    """
     clear_queue(DB_URL)
     started = api.post(f"/v1/goals/{goal_id}/roadmaps", headers=account.headers, json={})
     assert started.status_code == 202, started.text
-    assert run_worker_once(DB_URL) is True
-    job = api.get(f"/v1/jobs/{started.json()['id']}", headers=account.headers).json()
+    run_worker_once(DB_URL)
+    job: dict[str, Any] = {}
+    for _ in range(40):
+        job = api.get(f"/v1/jobs/{started.json()['id']}", headers=account.headers).json()
+        if job["status"] in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.5)
     assert job["status"] == "completed", job
     return job
 
