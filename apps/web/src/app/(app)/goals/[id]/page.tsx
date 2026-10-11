@@ -10,6 +10,7 @@ import { GoalActions } from "@/components/goals/goal-actions";
 import { GoalDetails } from "@/components/goals/goal-details";
 import { GoalStatusBadge } from "@/components/goals/goal-status-badge";
 import { PageContainer, PageHeader } from "@/components/layout/page";
+import { ProgressSection, ProgressSectionSkeleton } from "@/components/quiz/progress-section";
 import { RoadmapSection, RoadmapSectionSkeleton } from "@/components/roadmap/roadmap-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -99,6 +100,10 @@ async function GoalContent({ params, searchParams }: GoalPageProps) {
 
       <Suspense fallback={<RoadmapSectionSkeleton />}>
         <RoadmapSection goalId={goal.id} goalStatus={goal.status} timeZone={me.timezone} />
+      </Suspense>
+
+      <Suspense fallback={<ProgressSectionSkeleton />}>
+        <ProgressSection goalId={goal.id} goalStatus={goal.status} />
       </Suspense>
     </div>
   );

@@ -7,13 +7,17 @@ queue to try again later with exponential backoff while attempts remain.
 
 import structlog
 
+from app.ai.grading.grader import GradingInvalid
 from app.ai.lesson.writer import LessonInvalid
 from app.ai.provider import LLMError
+from app.ai.quiz.writer import QuizInvalid
 from app.ai.roadmap.planner import PlanInvalid
 from app.jobs import queue
 from app.jobs.errors import JobCancelled, JobFailure, LeaseLost
+from app.jobs.grade_job import run_grade
 from app.jobs.lesson_job import run_lesson
 from app.jobs.queue import Job
+from app.jobs.quiz_job import run_quiz
 from app.jobs.roadmap_job import run_roadmap
 from app.jobs.runtime import Lease, WorkerEnv, backoff_seconds
 
@@ -26,6 +30,10 @@ async def process_job(env: WorkerEnv, job: Job) -> None:
         try:
             if job.job_type == "lesson":
                 await run_lesson(env, job, lease)
+            elif job.job_type == "quiz":
+                await run_quiz(env, job, lease)
+            elif job.job_type == "grade":
+                await run_grade(env, job, lease)
             else:
                 await run_roadmap(env, job, lease)
         except LeaseLost:
@@ -36,7 +44,7 @@ async def process_job(env: WorkerEnv, job: Job) -> None:
             log.info("job.cancelled", job_id=str(job.id))
         except JobFailure as failure:
             await _end(env, job, failure.code, failure.message, retryable=failure.retryable)
-        except (PlanInvalid, LessonInvalid) as invalid:
+        except (PlanInvalid, LessonInvalid, QuizInvalid, GradingInvalid) as invalid:
             log.info(
                 "job.output_invalid",
                 job_id=str(job.id),

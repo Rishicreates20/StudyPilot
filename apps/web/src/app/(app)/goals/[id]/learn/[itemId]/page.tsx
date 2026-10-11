@@ -20,11 +20,13 @@ import { LessonReader } from "@/components/lesson/lesson-reader";
 import { LessonVersions } from "@/components/lesson/lesson-versions";
 import { NewVersionDialog } from "@/components/lesson/new-version-dialog";
 import { TopicNavigation } from "@/components/lesson/topic-navigation";
+import { TopicAssessment } from "@/components/quiz/topic-assessment";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { callApi } from "@/lib/api/call";
-import { fetchMe, fetchStudy } from "@/lib/api/server";
+import { ApiError, fetchAssessment, fetchMe, fetchStudy } from "@/lib/api/server";
+import { requireApiSession } from "@/lib/auth/session";
 import { isGoalId } from "@/lib/goals/ids";
 import { generateLessonAction, retryLessonAction } from "@/lib/lessons/actions";
 import { studyPath } from "@/lib/lessons/paths";
@@ -78,6 +80,10 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
   if (view.topic.goal_id !== id) notFound();
 
   const { topic, roadmap } = view;
+  // Revision sessions have no lesson and so no quiz; for the rest the card is secondary to the
+  // lesson, so a failure to load it hides the card instead of the page.
+  const assessment =
+    topic.kind === "revision" ? null : await loadAssessment(itemId, studyPath(id, itemId));
   const state = studyPanelState(view);
   const archived = view.goal_archived;
   const roadmapLink = roadmapPath(id, roadmap.status === "current" ? undefined : roadmap.version);
@@ -230,6 +236,14 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
               ) : null
             }
           />
+          {assessment ? (
+            <TopicAssessment
+              goalId={id}
+              itemId={itemId}
+              assessment={assessment}
+              timeZone={me.timezone}
+            />
+          ) : null}
           <LessonVersions
             goalId={id}
             itemId={itemId}
@@ -243,4 +257,14 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
       )}
     </div>
   );
+}
+
+async function loadAssessment(itemId: string, returnTo: string) {
+  const { accessToken } = await requireApiSession(returnTo);
+  try {
+    return await fetchAssessment(accessToken, itemId);
+  } catch (error) {
+    if (error instanceof ApiError) return null;
+    throw error;
+  }
 }

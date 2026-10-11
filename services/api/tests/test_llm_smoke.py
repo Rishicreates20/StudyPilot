@@ -116,3 +116,64 @@ def test_the_example_topic_is_a_lessonable_topic() -> None:
 
     assert topic.kind == "topic" and topic.language == "en"
     assert topic.earlier_titles and topic.later_titles
+
+
+# --- The quiz check --------------------------------------------------------------------------
+
+
+async def test_a_working_provider_gets_a_clear_quiz_report_with_the_marking(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from app.ai.factory import builtin_responder
+    from scripts.llm_smoke import run_quiz
+
+    code = await run_quiz(FakeProvider(builtin_responder))
+
+    report = capsys.readouterr().out
+    assert code == 0
+    assert "produced a valid quiz" in report and "synthetic:    yes" in report
+    assert "questions:    5 (3 multiple choice, 1 true/false, 1 short answer)" in report
+    assert "rubric points met for a partial answer" in report
+    assert "call lesson.write" not in report  # the lesson is a built-in sample unless asked for
+    assert "call quiz.write: finish=STOP" in report
+    assert "call grade.short_answer: finish=STOP" in report
+    assert "why:" not in report  # the quiz itself, with its answers, is only printed on request
+
+
+async def test_the_quiz_and_its_answers_are_printed_on_request(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from app.ai.factory import builtin_responder
+    from scripts.llm_smoke import run_quiz
+
+    code = await run_quiz(FakeProvider(builtin_responder), show=True)
+
+    report = capsys.readouterr().out
+    assert code == 0
+    assert "model answer:" in report and "rubric p1" in report and "why:" in report
+    assert "   * " in report  # the right option of each choice question is marked
+
+
+async def test_a_quiz_provider_error_is_reported_with_its_code(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.llm_smoke import run_quiz
+
+    code = await run_quiz(FakeProvider(script=[LLMRateLimited("HTTP 429: quota")]))
+
+    report = capsys.readouterr().out
+    assert code == 1
+    assert "FAILED: AI_RATE_LIMITED (retryable: True)" in report
+
+
+async def test_a_live_lesson_can_be_asked_for_and_is_then_one_more_call(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from app.ai.factory import builtin_responder
+    from scripts.llm_smoke import run_quiz
+
+    code = await run_quiz(FakeProvider(builtin_responder), live_lesson=True)
+
+    report = capsys.readouterr().out
+    assert code == 0
+    assert "call lesson.write: finish=STOP" in report and "call quiz.write: finish=STOP" in report

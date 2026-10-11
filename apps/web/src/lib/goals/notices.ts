@@ -109,6 +109,57 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Revision sessions don't have lessons",
     message: "They are a time to recall what you have studied.",
   },
+  "quiz-pending": {
+    variant: "info",
+    title: "This topic already has a quiz waiting",
+    message: "Take it first: a topic keeps one untaken quiz at a time.",
+  },
+  "lesson-required": {
+    variant: "info",
+    title: "Study this topic first",
+    message: "A quiz is written from the topic's lesson, so the lesson has to exist first.",
+  },
+  "quiz-limit": {
+    variant: "warning",
+    title: "Daily quiz limit reached",
+    message: "You have used today's quiz writing. Please try again tomorrow.",
+  },
+  "quiz-cancelled": {
+    variant: "info",
+    title: "Quiz cancelled",
+    message: "Nothing was saved. You can start again whenever you like.",
+  },
+  "marking-cancelled": {
+    variant: "info",
+    title: "Marking stopped",
+    message:
+      "Your short answers are still waiting. Ask for them to be marked again, or mark them yourself against the model answer.",
+  },
+  "answers-invalid": {
+    variant: "warning",
+    title: "We couldn't read those answers",
+    message: "Nothing was submitted. Please check your answers and try again.",
+  },
+  "already-submitted": {
+    variant: "info",
+    title: "This quiz was already submitted",
+    message: "A quiz can be taken once. Ask for a practice quiz to try again with new questions.",
+  },
+  reviewed: {
+    variant: "success",
+    title: "Your review is saved",
+    message: "Your score and your topic progress now follow your own marking.",
+  },
+  "not-reviewable": {
+    variant: "warning",
+    title: "That answer can't be reviewed",
+    message: "Only answers you wrote in your own words can be reviewed.",
+  },
+  "marking-exhausted": {
+    variant: "warning",
+    title: "Marking didn't work after several tries",
+    message: "Compare your answer with the model answer and mark it yourself instead.",
+  },
   "status-conflict": {
     variant: "warning",
     title: "That change isn't possible right now",

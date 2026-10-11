@@ -31,6 +31,8 @@ function job(overrides: Partial<GenerationJob> = {}): GenerationJob {
     error_message: null,
     roadmap_id: null,
     lesson_id: null,
+    attempt_id: null,
+    quiz_id: null,
     created_at: "2026-10-11T10:00:00Z",
     started_at: null,
     finished_at: null,

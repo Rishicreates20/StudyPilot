@@ -190,6 +190,10 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `ROADMAP_JOBS_PER_USER_PER_DAY` | No | No | `20` | Roadmap generations one learner may start per rolling 24 hours |
 | `LESSON_JOBS_PER_USER_PER_DAY` | No | No | `60` | Lessons one learner may have written per rolling 24 hours |
 | `LESSON_JOBS_ACTIVE_PER_USER` | No | No | `2` | Lessons one learner may have queued or being written at the same time |
+| `QUIZ_JOBS_PER_USER_PER_DAY` | No | No | `30` | Quizzes one learner may have written per rolling 24 hours |
+| `QUIZ_QUESTION_COUNT` · `QUIZ_SHORT_ANSWERS` | No | No | `5` · `1` | Questions per quiz (3–10), and how many of them are short answers graded by a model (0–2) |
+| `MASTERY_NEEDS_PRACTICE_BELOW` · `MASTERY_MASTERED_FROM` | No | No | `70` · `90` | Percent thresholds: below the first a topic needs practice, from the second it is mastered |
+| `MASTERY_RECENCY_DECAY` · `MASTERY_MIN_ANSWERS` | No | No | `0.7` · `4` | How much an older attempt counts relative to the next one; answers needed before a score is firm |
 | `CORS_ALLOWED_ORIGINS` | No | No | `http://localhost:3000` | Web origins allowed to call the API from a browser |
 | `LOG_LEVEL`, `APP_NAME`, `APP_VERSION` | No | No | `INFO`, `StudyPilot`, `0.1.0` | Logging and reporting |
 

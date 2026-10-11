@@ -124,7 +124,10 @@ async def start_generation(
         )
     if current_id is not None and not regenerate:
         raise ConflictError("This topic already has a lesson.", code="LESSON_EXISTS")
-    if await jobs_repo.active_for_item(connection, principal.user_id, item_id) is not None:
+    if (
+        await jobs_repo.active_for_item(connection, principal.user_id, item_id, "lesson")
+        is not None
+    ):
         raise ConflictError(
             "A lesson is already being written for this topic.", code="LESSON_JOB_ACTIVE"
         )
@@ -215,7 +218,7 @@ async def get_study(
         if lesson is not None
         else None
     )
-    job = await jobs_repo.latest_for_item(connection, principal.user_id, item_id)
+    job = await jobs_repo.latest_for_item(connection, principal.user_id, item_id, "lesson")
     outline = await lessons_repo.outline(connection, principal.user_id, record.topic.roadmap_id)
 
     position = next((i for i, entry in enumerate(outline) if entry.item_id == item_id), None)

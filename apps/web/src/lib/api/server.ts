@@ -291,3 +291,106 @@ export function saveLessonProgress(
     }),
   );
 }
+
+export type QuizDetail = components["schemas"]["QuizDetail"];
+export type QuizSummary = components["schemas"]["QuizSummary"];
+export type QuestionOut = components["schemas"]["QuestionOut"];
+export type AttemptResult = components["schemas"]["AttemptResult"];
+export type AnswerResult = components["schemas"]["AnswerResult"];
+export type AttemptBrief = components["schemas"]["AttemptBrief"];
+export type AttemptSubmit = components["schemas"]["AttemptSubmit"];
+export type TopicAssessment = components["schemas"]["TopicAssessment"];
+export type TopicMastery = components["schemas"]["TopicMasteryOut"];
+export type GoalProgress = components["schemas"]["GoalProgress"];
+export type TopicProgress = components["schemas"]["TopicProgress"];
+export type Recommendation = components["schemas"]["RecommendationOut"];
+export type QuizPurpose = NonNullable<components["schemas"]["QuizRequest"]["purpose"]>;
+export type MasteryBand = TopicMastery["band"];
+
+/** Queue a quiz for a roadmap topic, written from its lesson. The answer is the job (202). */
+export function startQuiz(
+  accessToken: string,
+  itemId: string,
+  purpose: QuizPurpose,
+): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/roadmap-items/{item_id}/quizzes", {
+      params: { path: { item_id: itemId } },
+      body: { purpose },
+    }),
+  );
+}
+
+/** Where a topic stands on quizzes and mastery, and whether a new quiz can be started. */
+export function fetchAssessment(accessToken: string, itemId: string): Promise<TopicAssessment> {
+  return call(() =>
+    client(accessToken).GET("/v1/roadmap-items/{item_id}/assessment", {
+      params: { path: { item_id: itemId } },
+    }),
+  );
+}
+
+/** A quiz to take: questions and options only, never a correct answer. */
+export function fetchQuiz(accessToken: string, quizId: string): Promise<QuizDetail> {
+  return call(() =>
+    client(accessToken).GET("/v1/quizzes/{quiz_id}", { params: { path: { quiz_id: quizId } } }),
+  );
+}
+
+/** Submit the answers of a quiz. Correctness comes back in the result, not before. */
+export function submitQuiz(
+  accessToken: string,
+  quizId: string,
+  body: AttemptSubmit,
+  idempotencyKey?: string,
+): Promise<AttemptResult> {
+  return call(() =>
+    client(accessToken).POST("/v1/quizzes/{quiz_id}/attempts", {
+      params: {
+        path: { quiz_id: quizId },
+        header: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {},
+      },
+      body,
+    }),
+  );
+}
+
+export function fetchAttempt(accessToken: string, attemptId: string): Promise<AttemptResult> {
+  return call(() =>
+    client(accessToken).GET("/v1/quiz-attempts/{attempt_id}", {
+      params: { path: { attempt_id: attemptId } },
+    }),
+  );
+}
+
+/** Ask for the short answers of an attempt to be marked again after marking failed. */
+export function regradeAttempt(accessToken: string, attemptId: string): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/quiz-attempts/{attempt_id}/regrade", {
+      params: { path: { attempt_id: attemptId } },
+    }),
+  );
+}
+
+/** Say which rubric points the learner's own short answer covered. */
+export function reviewAnswer(
+  accessToken: string,
+  answerId: string,
+  metPointIds: string[],
+): Promise<AttemptResult> {
+  return call(() =>
+    client(accessToken).PUT("/v1/quiz-answers/{answer_id}/review", {
+      params: { path: { answer_id: answerId } },
+      body: { met_point_ids: metPointIds },
+    }),
+  );
+}
+
+/** Mastery of every topic of a goal's current roadmap, and the recommended next step. */
+export function fetchGoalProgress(accessToken: string, goalId: string): Promise<GoalProgress> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/progress", {
+      params: { path: { goal_id: goalId } },
+    }),
+  );
+}

@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 /**
  * The acceptance scenario, in a real browser against real Supabase Auth and the real API:
@@ -95,6 +102,90 @@ async function accessTokenOf(context: BrowserContext): Promise<string> {
   return (JSON.parse(json) as { access_token: string }).access_token;
 }
 
+/**
+ * The right answers to the built-in test provider's sample questions
+ * (services/api/app/ai/fake_quiz.py). The real answer key is never readable from a browser, which
+ * is the point of these tests; but this provider asks a fixed set of questions, so a test can
+ * answer them properly.
+ */
+const RIGHT_OPTION: Readonly<Record<string, string>> = {
+  "Which habit helps most when you want to remember a new idea for a long time?":
+    "Reviewing it again after a few days",
+  "What is a good first step when a problem looks too big to start?":
+    "Splitting it into smaller parts",
+  "Why is explaining an idea aloud useful for learning?":
+    "It shows which parts you cannot yet explain",
+  "Which study session is usually most effective for focus?": "A short block with one clear goal",
+  "What should you do after getting a practice question wrong?":
+    "Find out why the answer was wrong",
+  "How does testing yourself differ from rereading?": "It makes you pull the answer from memory",
+  "Which note is the most helpful to write down?": "A question you could not answer",
+  "When is a break most useful during hard study?": "When your attention starts to drift",
+  "What does spacing your practice over several days do?": "It makes what you learn last longer",
+  "What is the best use of a worked example?": "Study each step, then try a similar one yourself",
+};
+const TRUE_STATEMENTS: ReadonlySet<string> = new Set([
+  "Making mistakes while practising is a normal and useful part of learning.",
+  "Mixing different kinds of problems in one session can improve your understanding.",
+  "Writing a short summary in your own words can show gaps in your understanding.",
+]);
+const MODEL_ANSWER: Readonly<Record<string, string>> = {
+  "In two or three sentences, explain how you would use a short quiz to plan what to study next.":
+    "A quiz shows which questions I got wrong. I would spend my next session on those weak parts, and check them again afterwards to see if I improved.",
+  "In two or three sentences, describe why spreading study over several days helps memory.":
+    "Memory fades if I do not revisit an idea. Reviewing it again strengthens what I remember, for example by going over my notes a few days later.",
+  "In two or three sentences, say what you would do after finding a gap in your understanding.":
+    "I would go back to the lesson, write down what was unclear, and then try a similar question to practise it again.",
+  "In two or three sentences, explain why explaining an idea aloud can help you learn.":
+    "Explaining aloud shows me what I cannot yet explain. It makes me organise the idea, and then I can fix the gaps I noticed.",
+};
+
+/**
+ * Press a button until its effect shows. A click that lands before the page has hydrated is lost,
+ * and the button is on the page well before that, so a test presses it again rather than guessing
+ * how long hydration takes. Pressing twice is harmless here: starting a quiz that is already being
+ * written is refused by the API.
+ */
+async function pressUntil(button: Locator, effect: Locator, timeout = 30_000) {
+  await expect(async () => {
+    if (!(await effect.first().isVisible())) await button.click({ timeout: 2_000 });
+    await expect(effect.first()).toBeVisible({ timeout: 4_000 });
+  }).toPass({ timeout });
+}
+
+/** On a quiz page: answer every question correctly (the short answer in the model answer's words). */
+async function answerQuizCorrectly(page: Page) {
+  const groups = page.getByRole("group");
+  await expect(groups.first()).toBeVisible(); // the quiz page has loaded
+  const count = await groups.count();
+  expect(count).toBeGreaterThan(2);
+  for (let index = 0; index < count; index += 1) {
+    const group = groups.nth(index);
+    const label = await group.evaluate((element) => {
+      const id = element.getAttribute("aria-labelledby");
+      return (id ? document.getElementById(id)?.textContent : null) ?? "";
+    });
+    // "3.Which habit…" -> the prompt, without its number or the sample set marker.
+    const prompt =
+      label
+        .replace(/^\d+\./, "")
+        .split(" (built-in test question set")[0]
+        ?.trim() ?? "";
+    if (await group.getByRole("textbox").count()) {
+      const model = MODEL_ANSWER[prompt];
+      if (!model) throw new Error(`No sample answer known for: ${prompt}`);
+      await group.getByRole("textbox").fill(model);
+    } else if (prompt in RIGHT_OPTION) {
+      await group.getByRole("radio", { name: RIGHT_OPTION[prompt] ?? "", exact: true }).check();
+    } else if (await group.getByRole("radio", { name: "True", exact: true }).count()) {
+      const name = TRUE_STATEMENTS.has(prompt) ? "True" : "False";
+      await group.getByRole("radio", { name, exact: true }).check();
+    } else {
+      throw new Error(`No sample answer known for: ${prompt}`);
+    }
+  }
+}
+
 async function freshContext(browser: Browser) {
   const context = await browser.newContext();
   return { context, page: await context.newPage() };
@@ -113,6 +204,10 @@ test.describe("onboarding, goals and the dashboard", () => {
   const secondGoal = `Pass the CKA exam ${randomUUID().slice(0, 6)}`;
   let firstGoalId = "";
   let lessonItemId = "";
+  let quizId = "";
+  let attemptId = "";
+  let practiceQuizId = "";
+  let thirdAttemptUrl = "";
 
   test("signed-out visitors cannot reach protected pages or the API", async ({ page, request }) => {
     for (const path of ["/dashboard", "/onboarding", "/settings", "/goals/new"]) {
@@ -422,8 +517,15 @@ test.describe("onboarding, goals and the dashboard", () => {
     await signIn(page, ada);
     await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
 
-    await page.getByRole("button", { name: "Finish lesson" }).click();
-    await expect(page.getByRole("heading", { name: "Lesson complete" })).toBeVisible();
+    // The button is on the page before the reader has hydrated, and a click before that is lost:
+    // press it again until the lesson reports it is complete.
+    const complete = page.getByRole("heading", { name: "Lesson complete" });
+    await expect(async () => {
+      if (!(await complete.isVisible())) {
+        await page.getByRole("button", { name: "Finish lesson" }).click({ timeout: 2_000 });
+      }
+      await expect(complete).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 25_000 });
     await expect(page.getByTestId("save-status")).toHaveText("Progress saved");
     await expect(page.getByRole("link", { name: /^Next topic:/ })).toBeVisible();
 
@@ -485,6 +587,225 @@ test.describe("onboarding, goals and the dashboard", () => {
     await expect(page).toHaveURL(/\?lesson=/);
     await expect(page.getByText("Earlier version", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Lesson complete" })).toBeVisible();
+  });
+
+  test("a quiz is written from the lesson, and nothing about its answers is readable before it is submitted", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    await expect(page.getByRole("heading", { name: /Check what you.ve learned/ })).toBeVisible();
+
+    // The quiz is written by the worker; the page follows its progress by itself.
+    await pressUntil(
+      page.getByRole("button", { name: "Take a quiz" }),
+      page.getByText("Writing your quiz").or(page.getByRole("link", { name: "Take the quiz" })),
+    );
+    await expect(page.getByRole("link", { name: "Take the quiz" })).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.reload();
+    await expect(page.getByText("Your quiz is ready")).toBeVisible();
+
+    await page.getByRole("link", { name: "Take the quiz" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/goals/${firstGoalId}/learn/${lessonItemId}/quiz/[0-9a-f-]{36}$`),
+    );
+    quizId = page.url().split("/quiz/")[1] ?? "";
+    await expect(page.getByText("Sample quiz", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("group")).toHaveCount(5);
+    await expect(page.getByText("0 of 5 answered")).toBeVisible();
+
+    // Nothing on the page says what is right or why.
+    const text = await page.locator("main").innerText();
+    expect(text).not.toMatch(/correct answer|as most study guidance agrees|model answer/i);
+
+    // Nor does the API: the quiz carries questions and options only.
+    const token = await accessTokenOf(page.context());
+    const response = await page.request.get(`${API_URL}/v1/quizzes/${quizId}`, {
+      headers: bearer(token),
+    });
+    expect(response.status()).toBe(200);
+    expect(await response.text()).not.toMatch(
+      /correct_option|explanation|rubric|model_answer|option_notes|is_correct/,
+    );
+  });
+
+  test("answering nothing scores zero: the topic needs practice, and the next step is a small one", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}/quiz/${quizId}`);
+
+    await page.getByRole("button", { name: "Submit answers" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/goals/${firstGoalId}/learn/${lessonItemId}/results/[0-9a-f-]{36}$`),
+    );
+    attemptId = page.url().split("/results/")[1] ?? "";
+
+    await expect(page.getByRole("heading", { level: 1, name: /^Results:/ })).toBeVisible();
+    await expect(page.getByText("0%").first()).toBeVisible();
+    await expect(page.getByText("Not answered")).toHaveCount(5);
+    // Every question explains itself, and the right answers are shown now.
+    await expect(page.getByText("Why", { exact: true })).toHaveCount(5);
+    await expect(page.getByText("Correct answer").first()).toBeVisible();
+
+    // The topic is weak, and the recommendation is a practice quiz, not starting the course again.
+    await expect(page.getByText("Needs practice").first()).toBeVisible();
+    await expect(page.getByText("Your next step")).toBeVisible();
+    await expect(page.getByText(/You scored 0% on/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Practise these parts" })).toBeVisible();
+    await expect(page.getByText(/don.t need to repeat the rest of the course/)).toBeVisible();
+    await expect(page.getByText(/· weak/).first()).toBeVisible();
+
+    // The results are stored: they are still there after a reload.
+    await page.reload();
+    await expect(page.getByText("Not answered")).toHaveCount(5);
+    await expect(page.getByText(/You scored 0% on/)).toBeVisible();
+  });
+
+  test("a quiz can be submitted once: its page points to the results and the API refuses a second try", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}/quiz/${quizId}`);
+
+    await expect(page.getByText("You have already submitted this quiz")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit answers" })).toHaveCount(0);
+    await page.getByRole("link", { name: "See your results" }).click();
+    await expect(page).toHaveURL(new RegExp(`/results/${attemptId}$`));
+
+    const token = await accessTokenOf(page.context());
+    const again = await page.request.post(`${API_URL}/v1/quizzes/${quizId}/attempts`, {
+      headers: bearer(token),
+      data: { answers: [] },
+    });
+    expect(again.status()).toBe(409);
+    expect((await again.json()).code).toBe("QUIZ_ALREADY_SUBMITTED");
+  });
+
+  test("weak topics show on the topic page, the goal page and the dashboard", async ({ page }) => {
+    await signIn(page, ada);
+
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+    await expect(page.getByText("How well you know this topic")).toBeVisible();
+    await expect(page.getByText("Needs practice").first()).toBeVisible();
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByRole("heading", { name: "Your mastery" })).toBeVisible();
+    const topics = page.getByRole("list", { name: "Progress by topic" });
+    await expect(topics.getByText("Needs practice").first()).toBeVisible();
+    await expect(topics.getByText("Not assessed yet").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Practise these parts" })).toBeVisible();
+
+    await page.goto("/dashboard");
+    await expect(page.getByRole("heading", { name: "Where you stand" })).toBeVisible();
+    await expect(page.getByText("Weakest topics")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Practise these parts" })).toBeVisible();
+  });
+
+  test("a practice quiz asks new questions; good answers raise the score without erasing the weak one", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+
+    await pressUntil(
+      page.getByRole("button", { name: "Practise these parts" }),
+      page.getByText("Writing your quiz").or(page.getByRole("link", { name: "Take the quiz" })),
+    );
+    await expect(page.getByRole("link", { name: "Take the quiz" })).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.getByRole("link", { name: "Take the quiz" }).click();
+    practiceQuizId = page.url().split("/quiz/")[1] ?? "";
+    expect(practiceQuizId).not.toBe(quizId);
+    await expect(page.getByText("Practice quiz", { exact: true }).first()).toBeVisible();
+
+    await answerQuizCorrectly(page);
+    await expect(page.getByText("5 of 5 answered")).toBeVisible();
+    await page.getByRole("button", { name: "Submit answers" }).click();
+    await expect(page).toHaveURL(/\/results\/[0-9a-f-]{36}$/);
+
+    // The short answer is marked in the background, and labelled as an estimate.
+    await expect(page.getByText("AI estimate").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(/An AI compared your answer with the rubric/)).toBeVisible();
+    await expect(page.getByText("100%").first()).toBeVisible();
+    // One good quiz does not wipe out the earlier one: 1 part newest to 0.7 parts older, 59%.
+    await expect(page.getByText("59%").first()).toBeVisible();
+    await expect(page.getByText("Needs practice").first()).toBeVisible();
+  });
+
+  test("a third good quiz moves the topic to 'getting there' and the next step moves on", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}`);
+
+    // At 59% the topic still needs practice, so the recommendation is still a practice quiz.
+    await pressUntil(
+      page.getByRole("button", { name: "Practise these parts" }),
+      page.getByText("Writing your quiz").or(page.getByRole("link", { name: "Take the quiz" })),
+    );
+    await expect(page.getByRole("link", { name: "Take the quiz" })).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.getByRole("link", { name: "Take the quiz" }).click();
+    await answerQuizCorrectly(page);
+    await page.getByRole("button", { name: "Submit answers" }).click();
+    await expect(page).toHaveURL(/\/results\/[0-9a-f-]{36}$/);
+    thirdAttemptUrl = page.url();
+
+    await expect(page.getByText("AI estimate").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("78%").first()).toBeVisible();
+    await expect(page.getByText("Getting there").first()).toBeVisible();
+    // The weak topic is no longer the priority: the next step is the next topic of the roadmap.
+    // (Next keeps the previous page, with its own recommendation, in the DOM: look at the visible one.)
+    await expect(page.getByText("Your next step").locator("visible=true")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Continue studying" })).toBeVisible();
+    await expect(page.getByText(/Start .*: it is the next topic on your roadmap/)).toBeVisible();
+  });
+
+  test("the learner can review the AI's marking of a short answer and the score follows", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(thirdAttemptUrl);
+    const before = await page.getByText(/\d+%/).first().innerText();
+    expect(before).toBe("100%");
+
+    const article = page.getByRole("article").last();
+    await expect(article.getByText("AI estimate")).toBeVisible();
+    await article.getByText("Disagree? Mark it yourself").click();
+    for (const box of await article.getByRole("checkbox").all()) await box.uncheck();
+    await article.getByRole("button", { name: "Save my marking" }).click();
+
+    await expect(page.getByText("Your review is saved")).toBeVisible();
+    const reviewed = page.getByRole("article").last();
+    await expect(reviewed.getByText("Marked by you")).toBeVisible();
+    await expect(reviewed.getByText("0 of 2 points")).toBeVisible();
+    await expect(page.getByText("Includes your own marking")).toBeVisible();
+    await expect(page.getByText(/^\d+%$/).first()).not.toHaveText("100%");
+
+    // And it is still there after a reload.
+    await page.reload();
+    await expect(page.getByRole("article").last().getByText("Marked by you")).toBeVisible();
+  });
+
+  test("the goal page lists every topic with its mastery, and the dashboard shows where the learner stands", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    const topics = page.getByRole("list", { name: "Progress by topic" });
+    await expect(topics.getByText(/Getting there|Needs practice/).first()).toBeVisible();
+    await expect(topics.getByText("Not assessed yet").first()).toBeVisible();
+    await expect(topics.getByRole("link", { name: /Results/ }).first()).toBeVisible();
+
+    await page.goto("/dashboard");
+    await expect(page.getByRole("heading", { name: "Where you stand" })).toBeVisible();
+    await expect(page.getByText("Not assessed yet").first()).toBeVisible();
   });
 
   test("a goal can be paused, resumed, completed and reopened", async ({ page }) => {
@@ -785,6 +1106,58 @@ test.describe("onboarding, goals and the dashboard", () => {
 
         // Her page for Ada's topic looks exactly like a page that doesn't exist.
         await other.page.goto(`/goals/${adasGoalId}/learn/${adasItemId}`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+      } finally {
+        await other.context.close();
+      }
+    });
+
+    test("cannot read, take, review or re-mark Ada's quizzes even with a real token", async ({
+      browser,
+      request,
+    }) => {
+      const other = await freshContext(browser);
+      try {
+        await signIn(other.page, grace);
+        const token = await accessTokenOf(other.context);
+
+        // Ada's first goal has the quizzes; the API answers 404 to everything, as for a missing id.
+        const missing = "00000000-0000-4000-8000-000000000000";
+        const attempts = [
+          await request.get(`${API_URL}/v1/quizzes/${quizId}`, { headers: bearer(token) }),
+          await request.post(`${API_URL}/v1/quizzes/${quizId}/attempts`, {
+            headers: bearer(token),
+            data: { answers: [] },
+          }),
+          await request.get(`${API_URL}/v1/quiz-attempts/${attemptId}`, {
+            headers: bearer(token),
+          }),
+          await request.post(`${API_URL}/v1/quiz-attempts/${attemptId}/regrade`, {
+            headers: bearer(token),
+          }),
+          await request.put(`${API_URL}/v1/quiz-answers/${missing}/review`, {
+            headers: bearer(token),
+            data: { met_point_ids: [] },
+          }),
+          await request.get(`${API_URL}/v1/roadmap-items/${lessonItemId}/assessment`, {
+            headers: bearer(token),
+          }),
+          await request.post(`${API_URL}/v1/roadmap-items/${lessonItemId}/quizzes`, {
+            headers: bearer(token),
+            data: {},
+          }),
+          await request.get(`${API_URL}/v1/goals/${firstGoalId}/progress`, {
+            headers: bearer(token),
+          }),
+        ];
+        expect(attempts.map((response) => response.status())).toEqual([
+          404, 404, 404, 404, 404, 404, 404, 404,
+        ]);
+
+        // Her pages for Ada's quiz and results look like pages that don't exist.
+        await other.page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}/quiz/${quizId}`);
+        await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+        await other.page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}/results/${attemptId}`);
         await expect(other.page.getByText("We couldn't find that")).toBeVisible();
       } finally {
         await other.context.close();

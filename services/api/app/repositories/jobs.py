@@ -15,12 +15,14 @@ from app.core.db import UserConnection
 from app.schemas.jobs import GenerationJob, JobType
 
 _SELECT = """
-    select j.id, j.goal_id, j.item_id, j.job_type, j.status, j.stage, j.progress, j.attempts,
-           j.max_attempts, j.cancel_requested, j.error_code, j.error_message,
-           r.id as roadmap_id, l.id as lesson_id, j.created_at, j.started_at, j.finished_at
+    select j.id, j.goal_id, j.item_id, j.attempt_id, j.job_type, j.status, j.stage, j.progress,
+           j.attempts, j.max_attempts, j.cancel_requested, j.error_code, j.error_message,
+           r.id as roadmap_id, l.id as lesson_id, z.id as quiz_id, j.created_at, j.started_at,
+           j.finished_at
     from public.generation_jobs j
     left join public.roadmaps r on r.job_id = j.id
     left join public.lessons l on l.job_id = j.id
+    left join public.quizzes z on z.job_id = j.id
 """
 
 
@@ -95,25 +97,39 @@ async def active_for_goal(
 
 
 async def active_for_item(
-    connection: UserConnection, user_id: UUID, item_id: UUID
+    connection: UserConnection, user_id: UUID, item_id: UUID, job_type: JobType
 ) -> GenerationJob | None:
-    """The topic's lesson job that is waiting or running, if any."""
+    """The topic's job of this kind that is waiting or running, if any."""
     cursor = await connection.execute(
-        f"{_SELECT} where j.user_id = %s and j.item_id = %s and j.status in ('queued', 'running')",
-        (user_id, item_id),
+        f"{_SELECT} where j.user_id = %s and j.item_id = %s and j.job_type = %s"
+        " and j.status in ('queued', 'running')",
+        (user_id, item_id, job_type),
     )
     row = await cursor.fetchone()
     return GenerationJob.model_validate(row) if row else None
 
 
 async def latest_for_item(
-    connection: UserConnection, user_id: UUID, item_id: UUID
+    connection: UserConnection, user_id: UUID, item_id: UUID, job_type: JobType
 ) -> GenerationJob | None:
-    """The newest lesson job of a topic, whatever its state."""
+    """The newest job of this kind for a topic, whatever its state."""
     cursor = await connection.execute(
-        f"{_SELECT} where j.user_id = %s and j.item_id = %s"
+        f"{_SELECT} where j.user_id = %s and j.item_id = %s and j.job_type = %s"
         " order by j.created_at desc, j.id desc limit 1",
-        (user_id, item_id),
+        (user_id, item_id, job_type),
+    )
+    row = await cursor.fetchone()
+    return GenerationJob.model_validate(row) if row else None
+
+
+async def latest_for_attempt(
+    connection: UserConnection, user_id: UUID, attempt_id: UUID
+) -> GenerationJob | None:
+    """The newest marking job of a quiz attempt, whatever its state."""
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.attempt_id = %s"
+        " order by j.created_at desc, j.id desc limit 1",
+        (user_id, attempt_id),
     )
     row = await cursor.fetchone()
     return GenerationJob.model_validate(row) if row else None

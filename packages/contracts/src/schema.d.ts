@@ -127,6 +127,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/goals/{goal_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Topic-by-topic mastery of a goal's roadmap and the recommended next step */
+        get: operations["goal_progress_v1_goals__goal_id__progress_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/goals/{goal_id}/roadmaps": {
         parameters: {
             query?: never;
@@ -296,6 +313,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/quiz-answers/{answer_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Review the marking of one of your short answers
+         * @description Say which rubric points your answer covered. The server computes the points from the rubric
+         *     and your review replaces the estimate.
+         */
+        put: operations["review_answer_v1_quiz_answers__answer_id__review_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/quiz-attempts/{attempt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The results of a submitted quiz */
+        get: operations["read_attempt_v1_quiz_attempts__attempt_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/quiz-attempts/{attempt_id}/regrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask for the short answers to be marked again */
+        post: operations["regrade_attempt_v1_quiz_attempts__attempt_id__regrade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/quizzes/{quiz_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A quiz to take: questions and options only
+         * @description Never contains a correct answer, an explanation or a rubric, before or after submission.
+         */
+        get: operations["read_quiz_v1_quizzes__quiz_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/quizzes/{quiz_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit answers and get them graded
+         * @description Multiple-choice and true/false answers are graded here, by comparing option ids; short
+         *     answers are marked in the background against their rubric (an estimate). A quiz can be
+         *     submitted once. Correct answers and explanations are revealed in this response, not before.
+         */
+        post: operations["submit_attempt_v1_quizzes__quiz_id__attempts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap-items/{item_id}/assessment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where a topic stands on quizzes and mastery, and whether a quiz can be started */
+        get: operations["read_assessment_v1_roadmap_items__item_id__assessment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roadmap-items/{item_id}/lessons": {
         parameters: {
             query?: never;
@@ -314,6 +445,30 @@ export interface paths {
          *     are kept.
          */
         post: operations["start_lesson_v1_roadmap_items__item_id__lessons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmap-items/{item_id}/quizzes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The quizzes written for a topic, newest first */
+        get: operations["list_quizzes_v1_roadmap_items__item_id__quizzes_get"];
+        put?: never;
+        /**
+         * Start writing a quiz for a roadmap topic
+         * @description Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.
+         *
+         *     The quiz is written from the topic's current lesson (409 `LESSON_REQUIRED` without one) and
+         *     has no answers in it that a browser can read. At most one untaken quiz exists per topic.
+         */
+        post: operations["start_quiz_v1_roadmap_items__item_id__quizzes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -382,6 +537,179 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswerFeedback
+         * @description What is revealed about a question once it has been submitted.
+         */
+        AnswerFeedback: {
+            /** Comment */
+            comment: string | null;
+            /** Correct Option Id */
+            correct_option_id: string | null;
+            /** Explanation */
+            explanation: string;
+            /** Matched Point Ids */
+            matched_point_ids: string[];
+            /** Model Answer */
+            model_answer: string | null;
+            /** Option Notes */
+            option_notes: {
+                [key: string]: string;
+            };
+            /** Rubric */
+            rubric: components["schemas"]["RubricPointOut"][] | null;
+        };
+        /**
+         * AnswerIn
+         * @description One answer: an option for a multiple-choice or true/false question, text for a short
+         *     answer.
+         */
+        AnswerIn: {
+            /** Option Id */
+            option_id?: string | null;
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Text */
+            text?: string | null;
+        };
+        /** AnswerResult */
+        AnswerResult: {
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "easy" | "medium" | "hard";
+            feedback: components["schemas"]["AnswerFeedback"];
+            /**
+             * Grading Method
+             * @enum {string}
+             */
+            grading_method: "deterministic" | "ai_estimate" | "self_review" | "pending";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Correct */
+            is_correct: boolean | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "multiple_choice" | "true_false" | "short_answer";
+            /** Max Points */
+            max_points: number;
+            /** Objective Id */
+            objective_id: string;
+            /** Objective Text */
+            objective_text: string | null;
+            /** Options */
+            options: components["schemas"]["OptionOut"][] | null;
+            /** Points Awarded */
+            points_awarded: number | null;
+            /** Position */
+            position: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Skipped */
+            skipped: boolean;
+            your_answer: components["schemas"]["YourAnswer"];
+        };
+        /** AttemptBrief */
+        AttemptBrief: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Percent */
+            percent: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "grading" | "graded";
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /** AttemptResult */
+        AttemptResult: {
+            /** Answers */
+            answers: components["schemas"]["AnswerResult"][];
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /** Graded At */
+            graded_at: string | null;
+            grading_job: components["schemas"]["GenerationJob"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Title */
+            item_title: string;
+            mastery: components["schemas"]["TopicMasteryOut"] | null;
+            /** Pending Answers */
+            pending_answers: number;
+            /** Percent */
+            percent: number | null;
+            /** Points Earned */
+            points_earned: number | null;
+            /** Points Possible */
+            points_possible: number | null;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "check" | "practice";
+            /**
+             * Quiz Id
+             * Format: uuid
+             */
+            quiz_id: string;
+            /** Quiz Title */
+            quiz_title: string;
+            recommendation: components["schemas"]["RecommendationOut"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "grading" | "graded";
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /**
+         * AttemptSubmit
+         * @description The learner's answers. A question left out counts as skipped.
+         */
+        AttemptSubmit: {
+            /** Answers */
+            answers?: components["schemas"]["AnswerIn"][];
+        };
         /** CalloutBlock */
         CalloutBlock: {
             /**
@@ -431,6 +759,8 @@ export interface components {
         };
         /** GenerationJob */
         GenerationJob: {
+            /** Attempt Id */
+            attempt_id: string | null;
             /** Attempts */
             attempts: number;
             /** Cancel Requested */
@@ -462,13 +792,15 @@ export interface components {
              * Job Type
              * @enum {string}
              */
-            job_type: "roadmap" | "lesson";
+            job_type: "roadmap" | "lesson" | "quiz" | "grade";
             /** Lesson Id */
             lesson_id: string | null;
             /** Max Attempts */
             max_attempts: number;
             /** Progress */
             progress: number;
+            /** Quiz Id */
+            quiz_id: string | null;
             /** Roadmap Id */
             roadmap_id: string | null;
             /** Stage */
@@ -566,6 +898,20 @@ export interface components {
             items: components["schemas"]["Goal"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /** GoalProgress */
+        GoalProgress: {
+            counts: components["schemas"]["ProgressCounts"];
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            recommendation: components["schemas"]["RecommendationOut"] | null;
+            /** Roadmap Id */
+            roadmap_id: string | null;
+            /** Topics */
+            topics: components["schemas"]["TopicProgress"][];
         };
         /** GoalStatusChange */
         GoalStatusChange: {
@@ -868,6 +1214,31 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** ObjectiveMastery */
+        ObjectiveMastery: {
+            /** Answers */
+            answers: number;
+            /** Id */
+            id: string;
+            /** Score */
+            score: number;
+            /** Text */
+            text: string | null;
+        };
+        /** ObjectiveOut */
+        ObjectiveOut: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+        };
+        /** OptionOut */
+        OptionOut: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+        };
         /**
          * OutlineEntry
          * @description One topic in the contents panel.
@@ -935,6 +1306,19 @@ export interface components {
              */
             type: string;
         };
+        /** ProgressCounts */
+        ProgressCounts: {
+            /** Mastered */
+            mastered: number;
+            /** Needs Practice */
+            needs_practice: number;
+            /** Not Assessed */
+            not_assessed: number;
+            /** Progressing */
+            progressing: number;
+            /** Total */
+            total: number;
+        };
         /** ProgressState */
         ProgressState: {
             /** Completed At */
@@ -980,6 +1364,159 @@ export interface components {
             /** Current Section Id */
             current_section_id?: string | null;
         };
+        /**
+         * QuestionOut
+         * @description A question as the learner sees it before answering: no key, no explanation.
+         */
+        QuestionOut: {
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "easy" | "medium" | "hard";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "multiple_choice" | "true_false" | "short_answer";
+            /** Max Points */
+            max_points: number;
+            /** Objective Id */
+            objective_id: string;
+            /** Objective Text */
+            objective_text: string | null;
+            /** Options */
+            options: components["schemas"]["OptionOut"][] | null;
+            /** Position */
+            position: number;
+            /** Prompt */
+            prompt: string;
+        };
+        /** QuizDetail */
+        QuizDetail: {
+            attempt: components["schemas"]["AttemptBrief"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Focus Objective Ids */
+            focus_objective_ids: string[];
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Title */
+            item_title: string;
+            /** Language */
+            language: string;
+            /**
+             * Lesson Id
+             * Format: uuid
+             */
+            lesson_id: string;
+            /** Objectives */
+            objectives: components["schemas"]["ObjectiveOut"][];
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "check" | "practice";
+            /** Question Count */
+            question_count: number;
+            /** Questions */
+            questions: components["schemas"]["QuestionOut"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "submitted";
+            /** Title */
+            title: string;
+        };
+        /** QuizList */
+        QuizList: {
+            /** Items */
+            items: components["schemas"]["QuizSummary"][];
+        };
+        /**
+         * QuizRequest
+         * @description Start writing a quiz for a topic.
+         */
+        QuizRequest: {
+            /**
+             * Purpose
+             * @description `check` tests the topic. `practice` targets the objectives the learner scored lowest on (chosen by the server from their stored answers, never by the client).
+             * @default check
+             * @enum {string}
+             */
+            purpose: "check" | "practice";
+        };
+        /** QuizSummary */
+        QuizSummary: {
+            attempt: components["schemas"]["AttemptBrief"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Synthetic */
+            is_synthetic: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Title */
+            item_title: string;
+            /**
+             * Lesson Id
+             * Format: uuid
+             */
+            lesson_id: string;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "check" | "practice";
+            /** Question Count */
+            question_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "submitted";
+            /** Title */
+            title: string;
+        };
         /** ReadinessResponse */
         ReadinessResponse: {
             /** Checks */
@@ -991,6 +1528,39 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "unavailable";
+        };
+        /** RecommendationOut */
+        RecommendationOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "take_quiz" | "practice_quiz" | "continue_studying" | "all_done";
+            /** Item Id */
+            item_id: string | null;
+            /** Item Title */
+            item_title: string | null;
+            /** Objective Ids */
+            objective_ids: string[];
+            /** Objective Texts */
+            objective_texts: string[];
+            /** Quiz Id */
+            quiz_id: string | null;
+            /** Reason */
+            reason: string;
+            /** Review Lesson */
+            review_lesson: boolean;
+        };
+        /**
+         * ReviewRequest
+         * @description Which rubric points the learner's own answer covered. Points are computed by the server.
+         */
+        ReviewRequest: {
+            /**
+             * Met Point Ids
+             * @description Ids from the answer's rubric.
+             */
+            met_point_ids?: string[];
         };
         /** Roadmap */
         Roadmap: {
@@ -1178,6 +1748,15 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** RubricPointOut */
+        RubricPointOut: {
+            /** Id */
+            id: string;
+            /** Points */
+            points: number;
+            /** Text */
+            text: string;
+        };
         /** SimpleExplanation */
         SimpleExplanation: {
             /** Analogy */
@@ -1236,6 +1815,27 @@ export interface components {
             versions: components["schemas"]["LessonVersion"][];
         };
         /**
+         * TopicAssessment
+         * @description Where a topic stands on quizzes: what is waiting, the last result, mastery, what runs.
+         */
+        TopicAssessment: {
+            /** Blocked By */
+            blocked_by: ("lesson_required" | "quiz_pending" | "quiz_in_progress" | "roadmap_not_current" | "goal_archived") | null;
+            /** Can Start */
+            can_start: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            job: components["schemas"]["GenerationJob"] | null;
+            last_attempt: components["schemas"]["AttemptBrief"] | null;
+            mastery: components["schemas"]["TopicMasteryOut"] | null;
+            /** Pending Quiz Id */
+            pending_quiz_id: string | null;
+            recommendation: components["schemas"]["RecommendationOut"] | null;
+        };
+        /**
          * TopicInfo
          * @description The roadmap topic a lesson belongs to.
          */
@@ -1275,6 +1875,62 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** TopicMasteryOut */
+        TopicMasteryOut: {
+            /** Algorithm Version */
+            algorithm_version: string;
+            /** Answers Count */
+            answers_count: number;
+            /** Attempts Count */
+            attempts_count: number;
+            /**
+             * Band
+             * @enum {string}
+             */
+            band: "needs_practice" | "progressing" | "mastered";
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Low Confidence */
+            low_confidence: boolean;
+            /** Mastered From */
+            mastered_from: number;
+            /** Needs Practice Below */
+            needs_practice_below: number;
+            /** Objectives */
+            objectives: components["schemas"]["ObjectiveMastery"][];
+            /** Score */
+            score: number;
+        };
+        /** TopicProgress */
+        TopicProgress: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "revision" | "enrichment";
+            last_attempt: components["schemas"]["AttemptBrief"] | null;
+            mastery: components["schemas"]["TopicMasteryOut"] | null;
+            /** Module Title */
+            module_title: string | null;
+            /** Pending Quiz Id */
+            pending_quiz_id: string | null;
+            study: components["schemas"]["ItemStudy"];
+            /** Title */
+            title: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1298,6 +1954,13 @@ export interface components {
             steps: string[];
             /** Title */
             title: string;
+        };
+        /** YourAnswer */
+        YourAnswer: {
+            /** Option Id */
+            option_id: string | null;
+            /** Text */
+            text: string | null;
         };
     };
     responses: never;
@@ -1734,6 +2397,64 @@ export interface operations {
                 };
             };
             /** @description No such goal, roadmap or job for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    goal_progress_v1_goals__goal_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalProgress"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -2355,6 +3076,401 @@ export interface operations {
             };
         };
     };
+    review_answer_v1_quiz_answers__answer_id__review_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                answer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptResult"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_attempt_v1_quiz_attempts__attempt_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptResult"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    regrade_attempt_v1_quiz_attempts__attempt_id__regrade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_quiz_v1_quizzes__quiz_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizDetail"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    submit_attempt_v1_quizzes__quiz_id__attempts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a form: you get the same result back. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                quiz_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttemptSubmit"];
+            };
+        };
+        responses: {
+            /** @description The same submission again: the same result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptResult"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptResult"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An answer names an unknown question or option */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_assessment_v1_roadmap_items__item_id__assessment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicAssessment"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     start_lesson_v1_roadmap_items__item_id__lessons_post: {
         parameters: {
             query?: never;
@@ -2419,6 +3535,147 @@ export interface operations {
                 };
             };
             /** @description Too many lessons at once, or today's limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description AI generation isn't configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_quizzes_v1_roadmap_items__item_id__quizzes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuizList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_quiz_v1_roadmap_items__item_id__quizzes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a form: you get the same result back. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuizRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic, quiz, attempt or goal for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Revision sessions don't have quizzes */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Today's quiz allowance is used up */
             429: {
                 headers: {
                     [name: string]: unknown;

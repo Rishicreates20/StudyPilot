@@ -17,6 +17,7 @@ import { LoadError } from "@/components/feedback/load-error";
 import { CardGridSkeleton } from "@/components/feedback/loading-state";
 import { NoticeBanner } from "@/components/feedback/notice-banner";
 import { GoalList } from "@/components/goals/goal-list";
+import { DashboardProgress } from "@/components/quiz/dashboard-progress";
 import { StatCard } from "@/components/goals/stat-card";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -184,6 +185,10 @@ async function DashboardContent({ searchParams }: { searchParams: SearchParams }
             <StatCard label="Paused" value={summary.paused} icon={PauseIcon} />
             <StatCard label="Completed" value={summary.completed} icon={CircleCheckIcon} />
           </section>
+
+          <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+            <DashboardProgress goals={inProgress.items} />
+          </Suspense>
 
           <section aria-labelledby="in-progress-heading" className="space-y-6">
             <h2 id="in-progress-heading" className="text-xl font-semibold tracking-tight">

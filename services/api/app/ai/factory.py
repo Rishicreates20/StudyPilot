@@ -4,6 +4,7 @@ import httpx2
 
 from app.ai.fake import FakeProvider, Reply
 from app.ai.fake_lesson import lesson_responder
+from app.ai.fake_quiz import grading_responder, quiz_responder
 from app.ai.fake_roadmap import roadmap_responder
 from app.ai.gemini import GeminiProvider
 from app.ai.provider import LLMNotConfigured, LLMProvider, StructuredRequest
@@ -11,9 +12,13 @@ from app.core.config import LlmProviderName, Settings
 
 
 def builtin_responder(request: StructuredRequest) -> Reply:
-    """The test double's answer, chosen by what the call is for (``lesson.*`` or ``roadmap.*``)."""
+    """The test double's answer, chosen by what the call is for (``lesson.*``, ``quiz.*``...)."""
     if request.purpose.startswith("lesson."):
         return lesson_responder(request)
+    if request.purpose.startswith("quiz."):
+        return quiz_responder(request)
+    if request.purpose.startswith("grade."):
+        return grading_responder(request)
     return roadmap_responder(request)
 
 

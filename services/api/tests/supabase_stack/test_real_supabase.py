@@ -746,3 +746,131 @@ def test_no_security_definer_function_in_public_is_callable_by_clients_on_real_s
     ).fetchall()
 
     assert leaks == [], f"callable by anon/authenticated: {[row['function_name'] for row in leaks]}"
+
+
+# --- Lessons and quizzes under Supabase's real roles ---------------------------------------------
+
+
+def finish_job(api: TestClient, account: Account, started: Any) -> dict[str, Any]:
+    """Run the queued job with the real worker (or wait for another one that got there first)."""
+    assert started.status_code == 202, started.text
+    run_worker_once(DB_URL)
+    job: dict[str, Any] = {}
+    for _ in range(40):
+        job = api.get(f"/v1/jobs/{started.json()['id']}", headers=account.headers).json()
+        if job["status"] in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.5)
+    assert job["status"] == "completed", job
+    return job
+
+
+def quiz_for_a_new_topic(api: TestClient, account: Account) -> tuple[str, str, str]:
+    """A goal with a roadmap, a lesson and a written quiz: (goal id, topic id, quiz id)."""
+    goal = create_goal(api, account, "Learn type theory")
+    roadmap = api.get(
+        f"/v1/roadmaps/{generate_roadmap(api, account, goal['id'])['roadmap_id']}",
+        headers=account.headers,
+    ).json()
+    topic = roadmap["modules"][0]["items"][0]["id"]
+    clear_queue(DB_URL)
+    finish_job(
+        api,
+        account,
+        api.post(f"/v1/roadmap-items/{topic}/lessons", headers=account.headers, json={}),
+    )
+    clear_queue(DB_URL)
+    quiz_job = finish_job(
+        api,
+        account,
+        api.post(f"/v1/roadmap-items/{topic}/quizzes", headers=account.headers, json={}),
+    )
+    return goal["id"], topic, quiz_job["quiz_id"]
+
+
+def test_a_quiz_is_written_taken_graded_and_private_to_its_owner(
+    api: TestClient, sign_up: Callable[..., Account]
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    goal, topic, quiz_id = quiz_for_a_new_topic(api, ada)
+
+    quiz = api.get(f"/v1/quizzes/{quiz_id}", headers=ada.headers)
+    assert quiz.status_code == 200, quiz.text
+    for secret in ("correct_option", "explanation", "rubric", "model_answer", "option_notes"):
+        assert secret not in quiz.text, secret
+
+    submitted = api.post(
+        f"/v1/quizzes/{quiz_id}/attempts", headers=ada.headers, json={"answers": []}
+    )
+    assert submitted.status_code == 201, submitted.text
+    result = submitted.json()
+    assert result["status"] == "graded" and result["percent"] == 0
+    assert all(answer["feedback"]["explanation"] for answer in result["answers"])
+    assert (
+        api.post(
+            f"/v1/quizzes/{quiz_id}/attempts", headers=ada.headers, json={"answers": []}
+        ).status_code
+        == 409
+    )
+    progress = api.get(f"/v1/goals/{goal}/progress", headers=ada.headers).json()
+    assert progress["counts"]["needs_practice"] == 1
+
+    attempts: list[tuple[str, str, dict[str, Any] | None]] = [
+        ("get", f"/v1/quizzes/{quiz_id}", None),
+        ("post", f"/v1/quizzes/{quiz_id}/attempts", {"answers": []}),
+        ("get", f"/v1/quiz-attempts/{result['id']}", None),
+        ("get", f"/v1/roadmap-items/{topic}/assessment", None),
+        ("post", f"/v1/roadmap-items/{topic}/quizzes", {}),
+        ("get", f"/v1/goals/{goal}/progress", None),
+    ]
+    for method, path, body in attempts:
+        response = api.request(method, path, headers=grace.headers, json=body)
+        assert response.status_code == 404, (path, response.status_code)
+
+
+def test_the_real_roles_cannot_read_answer_keys_or_write_assessment_tables(
+    api: TestClient,
+    database: psycopg.Connection[DictRow],
+    sign_up: Callable[..., Account],
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    _, _, quiz_id = quiz_for_a_new_topic(api, ada)
+    api.post(f"/v1/quizzes/{quiz_id}/attempts", headers=ada.headers, json={"answers": []})
+
+    for role, user in (("authenticated", ada.id), ("anon", None)):
+        with database.transaction(force_rollback=True):
+            _act_as(database, role, user)
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                database.execute("select * from public.question_answer_keys")
+
+    for statement in (
+        "update public.quizzes set title = 'Rewritten'",
+        "update public.questions set prompt = 'Rewritten'",
+        "update public.quiz_attempts set percent = 100",
+        "update public.quiz_answers set points_awarded = max_points",
+        "update public.topic_mastery set score = 100",
+        "delete from public.quiz_answers",
+        "insert into public.generation_jobs (user_id, goal_id, job_type) select user_id, goal_id,"
+        " 'grade' from public.generation_jobs limit 1",
+    ):
+        with database.transaction(force_rollback=True):
+            _act_as(database, "authenticated", ada.id)
+            with pytest.raises(
+                (psycopg.errors.InsufficientPrivilege, psycopg.errors.CheckViolation)
+            ):
+                database.execute(statement)  # type: ignore[arg-type]
+
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", grace.id)
+        for table in ("quizzes", "questions", "quiz_attempts", "quiz_answers", "topic_mastery"):
+            rows = database.execute(f"select 1 from public.{table}").fetchall()  # type: ignore[arg-type]  # noqa: S608
+            assert rows == [], table
+    for table in ("question_answer_keys", "quizzes", "quiz_attempts", "topic_mastery"):
+        allowed = database.execute(
+            "select has_table_privilege('anon', %s, 'select') as ok", (f"public.{table}",)
+        ).fetchone()
+        assert allowed is not None and allowed["ok"] is False, f"anon can read {table}"
+    keys = database.execute(
+        "select has_table_privilege('authenticated', 'public.question_answer_keys', 'select') as ok"
+    ).fetchone()
+    assert keys is not None and keys["ok"] is False

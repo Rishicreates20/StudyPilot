@@ -1,6 +1,485 @@
 {
   "components": {
     "schemas": {
+      "AnswerFeedback": {
+        "description": "What is revealed about a question once it has been submitted.",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "correct_option_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct Option Id"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "matched_point_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Point Ids",
+            "type": "array"
+          },
+          "model_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Answer"
+          },
+          "option_notes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Option Notes",
+            "type": "object"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RubricPointOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          }
+        },
+        "required": [
+          "explanation",
+          "correct_option_id",
+          "option_notes",
+          "rubric",
+          "model_answer",
+          "matched_point_ids",
+          "comment"
+        ],
+        "title": "AnswerFeedback",
+        "type": "object"
+      },
+      "AnswerIn": {
+        "additionalProperties": false,
+        "description": "One answer: an option for a multiple-choice or true/false question, text for a short\nanswer.",
+        "properties": {
+          "option_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9]{1,8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Id"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "question_id"
+        ],
+        "title": "AnswerIn",
+        "type": "object"
+      },
+      "AnswerResult": {
+        "properties": {
+          "difficulty": {
+            "enum": [
+              "easy",
+              "medium",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "feedback": {
+            "$ref": "#/components/schemas/AnswerFeedback"
+          },
+          "grading_method": {
+            "enum": [
+              "deterministic",
+              "ai_estimate",
+              "self_review",
+              "pending"
+            ],
+            "title": "Grading Method",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          },
+          "kind": {
+            "enum": [
+              "multiple_choice",
+              "true_false",
+              "short_answer"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_points": {
+            "title": "Max Points",
+            "type": "integer"
+          },
+          "objective_id": {
+            "title": "Objective Id",
+            "type": "string"
+          },
+          "objective_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective Text"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OptionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Awarded"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "boolean"
+          },
+          "your_answer": {
+            "$ref": "#/components/schemas/YourAnswer"
+          }
+        },
+        "required": [
+          "id",
+          "question_id",
+          "position",
+          "kind",
+          "prompt",
+          "options",
+          "objective_id",
+          "objective_text",
+          "difficulty",
+          "your_answer",
+          "skipped",
+          "is_correct",
+          "points_awarded",
+          "max_points",
+          "grading_method",
+          "feedback"
+        ],
+        "title": "AnswerResult",
+        "type": "object"
+      },
+      "AttemptBrief": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "status": {
+            "enum": [
+              "grading",
+              "graded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "submitted_at",
+          "percent"
+        ],
+        "title": "AttemptBrief",
+        "type": "object"
+      },
+      "AttemptResult": {
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerResult"
+            },
+            "title": "Answers",
+            "type": "array"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "grading_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_title": {
+            "title": "Item Title",
+            "type": "string"
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicMasteryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_answers": {
+            "title": "Pending Answers",
+            "type": "integer"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "points_earned": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Earned"
+          },
+          "points_possible": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Possible"
+          },
+          "purpose": {
+            "enum": [
+              "check",
+              "practice"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "quiz_id": {
+            "format": "uuid",
+            "title": "Quiz Id",
+            "type": "string"
+          },
+          "quiz_title": {
+            "title": "Quiz Title",
+            "type": "string"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "grading",
+              "graded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "quiz_id",
+          "goal_id",
+          "item_id",
+          "item_title",
+          "quiz_title",
+          "purpose",
+          "status",
+          "submitted_at",
+          "graded_at",
+          "points_earned",
+          "points_possible",
+          "percent",
+          "pending_answers",
+          "grading_job",
+          "is_synthetic",
+          "answers",
+          "mastery",
+          "recommendation"
+        ],
+        "title": "AttemptResult",
+        "type": "object"
+      },
+      "AttemptSubmit": {
+        "additionalProperties": false,
+        "description": "The learner's answers. A question left out counts as skipped.",
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerIn"
+            },
+            "maxItems": 12,
+            "title": "Answers",
+            "type": "array"
+          }
+        },
+        "title": "AttemptSubmit",
+        "type": "object"
+      },
       "CalloutBlock": {
         "additionalProperties": false,
         "properties": {
@@ -135,6 +614,18 @@
       },
       "GenerationJob": {
         "properties": {
+          "attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
           "attempts": {
             "title": "Attempts",
             "type": "integer"
@@ -207,7 +698,9 @@
           "job_type": {
             "enum": [
               "roadmap",
-              "lesson"
+              "lesson",
+              "quiz",
+              "grade"
             ],
             "title": "Job Type",
             "type": "string"
@@ -233,6 +726,18 @@
             "minimum": 0.0,
             "title": "Progress",
             "type": "integer"
+          },
+          "quiz_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Id"
           },
           "roadmap_id": {
             "anyOf": [
@@ -279,6 +784,7 @@
           "goal_id",
           "job_type",
           "item_id",
+          "attempt_id",
           "status",
           "stage",
           "progress",
@@ -289,6 +795,7 @@
           "error_message",
           "roadmap_id",
           "lesson_id",
+          "quiz_id",
           "created_at",
           "started_at",
           "finished_at"
@@ -579,6 +1086,56 @@
           "next_cursor"
         ],
         "title": "GoalPage",
+        "type": "object"
+      },
+      "GoalProgress": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/ProgressCounts"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "roadmap_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roadmap Id"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicProgress"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal_id",
+          "roadmap_id",
+          "topics",
+          "counts",
+          "recommendation"
+        ],
+        "title": "GoalProgress",
         "type": "object"
       },
       "GoalStatusChange": {
@@ -1475,6 +2032,77 @@
         "title": "Objective",
         "type": "object"
       },
+      "ObjectiveMastery": {
+        "properties": {
+          "answers": {
+            "title": "Answers",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "score",
+          "answers"
+        ],
+        "title": "ObjectiveMastery",
+        "type": "object"
+      },
+      "ObjectiveOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "ObjectiveOut",
+        "type": "object"
+      },
+      "OptionOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "OptionOut",
+        "type": "object"
+      },
       "OutlineEntry": {
         "description": "One topic in the contents panel.",
         "properties": {
@@ -1652,6 +2280,39 @@
         "title": "ProblemDetail",
         "type": "object"
       },
+      "ProgressCounts": {
+        "properties": {
+          "mastered": {
+            "title": "Mastered",
+            "type": "integer"
+          },
+          "needs_practice": {
+            "title": "Needs Practice",
+            "type": "integer"
+          },
+          "not_assessed": {
+            "title": "Not Assessed",
+            "type": "integer"
+          },
+          "progressing": {
+            "title": "Progressing",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "mastered",
+          "progressing",
+          "needs_practice",
+          "not_assessed"
+        ],
+        "title": "ProgressCounts",
+        "type": "object"
+      },
       "ProgressState": {
         "properties": {
           "completed_at": {
@@ -1754,6 +2415,325 @@
         "title": "ProgressUpdate",
         "type": "object"
       },
+      "QuestionOut": {
+        "description": "A question as the learner sees it before answering: no key, no explanation.",
+        "properties": {
+          "difficulty": {
+            "enum": [
+              "easy",
+              "medium",
+              "hard"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "multiple_choice",
+              "true_false",
+              "short_answer"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_points": {
+            "title": "Max Points",
+            "type": "integer"
+          },
+          "objective_id": {
+            "title": "Objective Id",
+            "type": "string"
+          },
+          "objective_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective Text"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OptionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "kind",
+          "prompt",
+          "options",
+          "objective_id",
+          "objective_text",
+          "difficulty",
+          "max_points"
+        ],
+        "title": "QuestionOut",
+        "type": "object"
+      },
+      "QuizDetail": {
+        "properties": {
+          "attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttemptBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "focus_objective_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Focus Objective Ids",
+            "type": "array"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_title": {
+            "title": "Item Title",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "lesson_id": {
+            "format": "uuid",
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "objectives": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveOut"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "purpose": {
+            "enum": [
+              "check",
+              "practice"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "submitted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "item_id",
+          "item_title",
+          "lesson_id",
+          "purpose",
+          "title",
+          "question_count",
+          "is_synthetic",
+          "created_at",
+          "status",
+          "attempt",
+          "language",
+          "focus_objective_ids",
+          "objectives",
+          "questions"
+        ],
+        "title": "QuizDetail",
+        "type": "object"
+      },
+      "QuizList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuizSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "QuizList",
+        "type": "object"
+      },
+      "QuizRequest": {
+        "additionalProperties": false,
+        "description": "Start writing a quiz for a topic.",
+        "properties": {
+          "purpose": {
+            "default": "check",
+            "description": "`check` tests the topic. `practice` targets the objectives the learner scored lowest on (chosen by the server from their stored answers, never by the client).",
+            "enum": [
+              "check",
+              "practice"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "title": "QuizRequest",
+        "type": "object"
+      },
+      "QuizSummary": {
+        "properties": {
+          "attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttemptBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_title": {
+            "title": "Item Title",
+            "type": "string"
+          },
+          "lesson_id": {
+            "format": "uuid",
+            "title": "Lesson Id",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "check",
+              "practice"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "question_count": {
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "submitted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "item_id",
+          "item_title",
+          "lesson_id",
+          "purpose",
+          "title",
+          "question_count",
+          "is_synthetic",
+          "created_at",
+          "status",
+          "attempt"
+        ],
+        "title": "QuizSummary",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "properties": {
           "checks": {
@@ -1781,6 +2761,106 @@
           "checks"
         ],
         "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "RecommendationOut": {
+        "properties": {
+          "action": {
+            "enum": [
+              "take_quiz",
+              "practice_quiz",
+              "continue_studying",
+              "all_done"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "item_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Title"
+          },
+          "objective_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Objective Ids",
+            "type": "array"
+          },
+          "objective_texts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Objective Texts",
+            "type": "array"
+          },
+          "quiz_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiz Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "review_lesson": {
+            "title": "Review Lesson",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "reason",
+          "item_id",
+          "item_title",
+          "quiz_id",
+          "objective_ids",
+          "objective_texts",
+          "review_lesson"
+        ],
+        "title": "RecommendationOut",
+        "type": "object"
+      },
+      "ReviewRequest": {
+        "additionalProperties": false,
+        "description": "Which rubric points the learner's own answer covered. Points are computed by the server.",
+        "properties": {
+          "met_point_ids": {
+            "description": "Ids from the answer's rubric.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Met Point Ids",
+            "type": "array"
+          }
+        },
+        "title": "ReviewRequest",
         "type": "object"
       },
       "Roadmap": {
@@ -2274,6 +3354,29 @@
         "title": "RoadmapSummary",
         "type": "object"
       },
+      "RubricPointOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "points"
+        ],
+        "title": "RubricPointOut",
+        "type": "object"
+      },
       "SimpleExplanation": {
         "additionalProperties": false,
         "properties": {
@@ -2474,6 +3577,102 @@
         "title": "StudyView",
         "type": "object"
       },
+      "TopicAssessment": {
+        "description": "Where a topic stands on quizzes: what is waiting, the last result, mastery, what runs.",
+        "properties": {
+          "blocked_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lesson_required",
+                  "quiz_pending",
+                  "quiz_in_progress",
+                  "roadmap_not_current",
+                  "goal_archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked By"
+          },
+          "can_start": {
+            "title": "Can Start",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttemptBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicMasteryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_quiz_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Quiz Id"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "item_id",
+          "mastery",
+          "pending_quiz_id",
+          "last_attempt",
+          "job",
+          "can_start",
+          "blocked_by",
+          "recommendation"
+        ],
+        "title": "TopicAssessment",
+        "type": "object"
+      },
       "TopicInfo": {
         "description": "The roadmap topic a lesson belongs to.",
         "properties": {
@@ -2567,6 +3766,159 @@
         "title": "TopicInfo",
         "type": "object"
       },
+      "TopicMasteryOut": {
+        "properties": {
+          "algorithm_version": {
+            "title": "Algorithm Version",
+            "type": "string"
+          },
+          "answers_count": {
+            "title": "Answers Count",
+            "type": "integer"
+          },
+          "attempts_count": {
+            "title": "Attempts Count",
+            "type": "integer"
+          },
+          "band": {
+            "enum": [
+              "needs_practice",
+              "progressing",
+              "mastered"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "low_confidence": {
+            "title": "Low Confidence",
+            "type": "boolean"
+          },
+          "mastered_from": {
+            "title": "Mastered From",
+            "type": "number"
+          },
+          "needs_practice_below": {
+            "title": "Needs Practice Below",
+            "type": "number"
+          },
+          "objectives": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveMastery"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item_id",
+          "score",
+          "band",
+          "attempts_count",
+          "answers_count",
+          "low_confidence",
+          "objectives",
+          "computed_at",
+          "algorithm_version",
+          "needs_practice_below",
+          "mastered_from"
+        ],
+        "title": "TopicMasteryOut",
+        "type": "object"
+      },
+      "TopicProgress": {
+        "properties": {
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "revision",
+              "enrichment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttemptBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mastery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicMasteryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "module_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Title"
+          },
+          "pending_quiz_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Quiz Id"
+          },
+          "study": {
+            "$ref": "#/components/schemas/ItemStudy"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "title",
+          "module_title",
+          "kind",
+          "study",
+          "mastery",
+          "pending_quiz_id",
+          "last_attempt"
+        ],
+        "title": "TopicProgress",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -2647,6 +3999,38 @@
           "answer"
         ],
         "title": "WorkedExample",
+        "type": "object"
+      },
+      "YourAnswer": {
+        "properties": {
+          "option_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "option_id",
+          "text"
+        ],
+        "title": "YourAnswer",
         "type": "object"
       }
     },
@@ -3295,6 +4679,84 @@
         "summary": "A goal's recent roadmap generation jobs, newest first",
         "tags": [
           "roadmaps"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/progress": {
+      "get": {
+        "operationId": "goal_progress_v1_goals__goal_id__progress_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Topic-by-topic mastery of a goal's roadmap and the recommended next step",
+        "tags": [
+          "quizzes"
         ]
       }
     },
@@ -4106,6 +5568,557 @@
         ]
       }
     },
+    "/v1/quiz-answers/{answer_id}/review": {
+      "put": {
+        "description": "Say which rubric points your answer covered. The server computes the points from the rubric\nand your review replaces the estimate.",
+        "operationId": "review_answer_v1_quiz_answers__answer_id__review_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "answer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Answer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review the marking of one of your short answers",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
+    "/v1/quiz-attempts/{attempt_id}": {
+      "get": {
+        "operationId": "read_attempt_v1_quiz_attempts__attempt_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attempt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attempt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The results of a submitted quiz",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
+    "/v1/quiz-attempts/{attempt_id}/regrade": {
+      "post": {
+        "operationId": "regrade_attempt_v1_quiz_attempts__attempt_id__regrade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attempt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attempt Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ask for the short answers to be marked again",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
+    "/v1/quizzes/{quiz_id}": {
+      "get": {
+        "description": "Never contains a correct answer, an explanation or a rubric, before or after submission.",
+        "operationId": "read_quiz_v1_quizzes__quiz_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A quiz to take: questions and options only",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
+    "/v1/quizzes/{quiz_id}/attempts": {
+      "post": {
+        "description": "Multiple-choice and true/false answers are graded here, by comparing option ids; short\nanswers are marked in the background against their rubric (an estimate). A quiz can be\nsubmitted once. Correct answers and explanations are revealed in this response, not before.",
+        "operationId": "submit_attempt_v1_quizzes__quiz_id__attempts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "quiz_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quiz Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Send the same value when resubmitting a form: you get the same result back.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Send the same value when resubmitting a form: you get the same result back.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttemptSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptResult"
+                }
+              }
+            },
+            "description": "The same submission again: the same result"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An answer names an unknown question or option"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit answers and get them graded",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
+    "/v1/roadmap-items/{item_id}/assessment": {
+      "get": {
+        "operationId": "read_assessment_v1_roadmap_items__item_id__assessment_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicAssessment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Where a topic stands on quizzes and mastery, and whether a quiz can be started",
+        "tags": [
+          "quizzes"
+        ]
+      }
+    },
     "/v1/roadmap-items/{item_id}/lessons": {
       "post": {
         "description": "Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.\n\nWithout a body a first lesson is written (409 if the topic already has one). With `adjust`,\n`feedback` or `regenerate`, a NEW version is written when the job completes: earlier versions\nare kept.",
@@ -4232,6 +6245,211 @@
         "summary": "Start writing the lesson for a roadmap topic",
         "tags": [
           "lessons"
+        ]
+      }
+    },
+    "/v1/roadmap-items/{item_id}/quizzes": {
+      "get": {
+        "operationId": "list_quizzes_v1_roadmap_items__item_id__quizzes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuizList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The quizzes written for a topic, newest first",
+        "tags": [
+          "quizzes"
+        ]
+      },
+      "post": {
+        "description": "Queues a background job and returns it at once (202); poll `GET /v1/jobs/{id}`.\n\nThe quiz is written from the topic's current lesson (409 `LESSON_REQUIRED` without one) and\nhas no answers in it that a browser can read. At most one untaken quiz exists per topic.",
+        "operationId": "start_quiz_v1_roadmap_items__item_id__quizzes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Send the same value when resubmitting a form: you get the same result back.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Send the same value when resubmitting a form: you get the same result back.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuizRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic, quiz, attempt or goal for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Revision sessions don't have quizzes"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Today's quiz allowance is used up"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "AI generation isn't configured"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start writing a quiz for a roadmap topic",
+        "tags": [
+          "quizzes"
         ]
       }
     },

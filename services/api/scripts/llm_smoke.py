@@ -3,12 +3,18 @@
     uv run --directory services/api python -m scripts.llm_smoke                 # plan a roadmap
     uv run --directory services/api python -m scripts.llm_smoke lesson          # write a lesson
     uv run --directory services/api python -m scripts.llm_smoke lesson --show   # ...and print it
+    uv run --directory services/api python -m scripts.llm_smoke quiz            # quiz + marking
+    uv run --directory services/api python -m scripts.llm_smoke quiz --live-lesson   # ...lesson too
+    uv run --directory services/api python -m scripts.llm_smoke quiz --show     # ...and print it
 
 It reads ``services/api/.env`` exactly like the API and the worker do, runs a small fixed example
 through the real planner or lesson writer (prompt, schema, validation and, if needed, the one
 repair), and prints a short report. It does not touch the database and never prints the API key or
 the prompt; a failure shows the error code and a short, key-free detail. ``--show`` also prints the
-lesson that PASSED validation, so a person can judge its quality (an unchecked answer never is).
+lesson (or quiz, with its answers) that PASSED validation, so a person can judge its quality (an
+unchecked answer never is). ``quiz`` makes two real calls: a quiz written from a built-in sample
+lesson (add ``--live-lesson`` to have the model write the lesson first), and the marking of a
+deliberately partial short answer.
 
 Use it after setting ``LLM_PROVIDER=gemini`` and ``GEMINI_API_KEY`` to check the live path. A real
 call uses a small amount of the provider's quota.
@@ -21,13 +27,25 @@ from uuid import uuid4
 
 import httpx2
 
-from app.ai.calls import CallRecord
+from app.ai.calls import CallRecord, Observer
 from app.ai.factory import build_provider
+from app.ai.fake_lesson import sample_lesson
+from app.ai.grading.grader import (
+    AnswerToGrade,
+    GradingInvalid,
+    RubricPointInput,
+    grade_short_answers,
+)
 from app.ai.lesson.context import TopicFacts
 from app.ai.lesson.context import build_context as build_lesson_context
 from app.ai.lesson.schema import CalloutBlock, CodeBlock, Lesson, ListBlock, ParagraphBlock
+from app.ai.lesson.validation import build_lesson
 from app.ai.lesson.writer import LessonInvalid, write_lesson
 from app.ai.provider import LLMError, LLMProvider
+from app.ai.quiz.context import QuizObjective
+from app.ai.quiz.context import build_context as build_quiz_context
+from app.ai.quiz.schema import BuiltMultipleChoice, BuiltQuiz, BuiltShortAnswer
+from app.ai.quiz.writer import QuizInvalid, write_quiz
 from app.ai.roadmap.context import build_context, readiness_problems
 from app.ai.roadmap.planner import PlanInvalid, plan_roadmap
 from app.core.config import Settings, load_settings_or_exit
@@ -178,6 +196,128 @@ async def run_lesson(provider: LLMProvider, *, show: bool = False) -> int:
     return 0
 
 
+async def run_quiz(provider: LLMProvider, *, show: bool = False, live_lesson: bool = False) -> int:
+    """Write a quiz from a lesson and mark a partial short answer (2 calls; 3 if lesson is live)."""
+    goal, topic = example_goal(), example_topic()
+    calls: list[CallRecord] = []
+
+    async def observe(record: CallRecord) -> None:
+        calls.append(record)
+
+    try:
+        lesson_context = build_lesson_context(goal, topic)
+        if live_lesson:
+            lesson = (await write_lesson(provider, lesson_context, observer=observe)).lesson
+        else:
+            sample, _ = build_lesson(sample_lesson(lesson_context.input_data()))
+            if sample is None:  # the built-in sample always builds; this guards a future edit
+                raise RuntimeError("the built-in sample lesson no longer builds")
+            lesson = sample
+        context = build_quiz_context(
+            goal,
+            topic_title=topic.title,
+            topic_description=topic.description,
+            objectives=tuple(
+                QuizObjective(f"o{number}", text) for number, text in enumerate(topic.objectives, 1)
+            ),
+            lesson=lesson,
+            language=topic.language,
+            purpose="check",
+            focus_objective_ids=(),
+            question_count=5,
+            max_short_answers=1,
+            previous_prompts=(),
+            shuffle_seed="smoke",
+        )
+        outcome = await write_quiz(provider, context, observer=observe)
+    except (LessonInvalid, QuizInvalid) as invalid:
+        print(f"FAILED: the model's output broke {len(invalid.violations)} rule(s) twice:")
+        for violation in invalid.violations:
+            print(f"  - {violation.code}: {violation.message}")
+        _print_calls(calls)
+        return 1
+    except LLMError as error:
+        print(f"FAILED: {error.code} (retryable: {error.retryable})")
+        print(f"  detail: {error.detail or '(none)'}")
+        _print_calls(calls)
+        return 1
+
+    quiz = outcome.quiz
+    kinds = [question.kind for question in quiz.questions]
+    print(f"OK: {outcome.provider} / {outcome.model_id} produced a valid quiz")
+    print(f"  title:        {quiz.title}")
+    print(
+        f"  questions:    {len(kinds)} ({kinds.count('multiple_choice')} multiple choice, "
+        f"{kinds.count('true_false')} true/false, {kinds.count('short_answer')} short answer)"
+    )
+    print(f"  repaired:     {'yes (the first answer broke a rule)' if outcome.repaired else 'no'}")
+    print(
+        f"  synthetic:    {'yes: a test double, not a real model' if outcome.synthetic else 'no'}"
+    )
+    status = await _mark_sample_answer(provider, quiz, observe)
+    _print_calls(calls)
+    if show:
+        _print_quiz(quiz)
+    return status
+
+
+async def _mark_sample_answer(provider: LLMProvider, quiz: BuiltQuiz, observe: Observer) -> int:
+    """Mark the model answer's first sentence against the rubric: it should earn some, not all."""
+    short = next((q for q in quiz.questions if isinstance(q, BuiltShortAnswer)), None)
+    if short is None:
+        print("  marking:      skipped (the quiz has no short answer)")
+        return 0
+    answer = AnswerToGrade(
+        answer_id="smoke-1",
+        question=short.prompt,
+        rubric=tuple(RubricPointInput(p.id, p.text, p.points) for p in short.rubric),
+        model_answer=short.model_answer,
+        learner_answer=short.model_answer.split(". ")[0],
+    )
+    try:
+        marked = await grade_short_answers(
+            provider, (answer,), language=quiz.language, observer=observe
+        )
+    except GradingInvalid as invalid:
+        print(f"FAILED: the model's marking broke {len(invalid.violations)} rule(s) twice:")
+        for violation in invalid.violations:
+            print(f"  - {violation.code}: {violation.message}")
+        return 1
+    except LLMError as error:
+        print(f"FAILED: marking: {error.code} (retryable: {error.retryable})")
+        print(f"  detail: {error.detail or '(none)'}")
+        return 1
+    (mark,) = marked.marks
+    print(
+        f"  marking:      {len(mark.met_point_ids)} of {len(short.rubric)} rubric points met for a "
+        f"partial answer ({'repaired' if marked.repaired else 'first try'})"
+    )
+    return 0
+
+
+def _print_quiz(quiz: BuiltQuiz) -> None:
+    print("\n" + "=" * 78)
+    print(quiz.title)
+    print("=" * 78)
+    for number, question in enumerate(quiz.questions, start=1):
+        print(
+            f"\n{number}. [{question.kind}, {question.difficulty}, {question.objective_id}] "
+            f"{question.prompt}"
+        )
+        if isinstance(question, BuiltShortAnswer):
+            for point in question.rubric:
+                print(f"     rubric {point.id} ({point.points}): {point.text}")
+            print(f"     model answer: {question.model_answer}")
+        else:
+            for option in question.options:
+                mark = "*" if option.id == question.correct_option_id else " "
+                print(f"   {mark} {option.id}) {option.text}")
+            if isinstance(question, BuiltMultipleChoice):
+                for option_id, note in question.option_notes.items():
+                    print(f"     note {option_id}: {note}")
+        print(f"     why: {question.explanation}")
+
+
 def _print_lesson(lesson: Lesson) -> None:
     fence = "`" * 3
     print("\n" + "=" * 78)
@@ -220,13 +360,22 @@ def _print_lesson(lesson: Lesson) -> None:
         print(f"  Like: {lesson.simple_explanation.analogy}")
 
 
-async def main(settings: Settings, *, lesson: bool = False, show: bool = False) -> int:
+async def main(
+    settings: Settings,
+    *,
+    lesson: bool = False,
+    quiz: bool = False,
+    show: bool = False,
+    live_lesson: bool = False,
+) -> int:
     async with httpx2.AsyncClient() as client:
         try:
             provider = build_provider(settings, client)
         except LLMError as error:
             print(f"Not configured: {error.detail}. Set LLM_PROVIDER (and GEMINI_API_KEY) in .env.")
             return 2
+        if quiz:
+            return await run_quiz(provider, show=show, live_lesson=live_lesson)
         return await (run_lesson(provider, show=show) if lesson else run(provider))
 
 
@@ -235,7 +384,13 @@ if __name__ == "__main__":
     arguments = sys.argv[1:]
     sys.exit(
         asyncio.run(
-            main(load_settings_or_exit(), lesson="lesson" in arguments, show="--show" in arguments),
+            main(
+                load_settings_or_exit(),
+                lesson="lesson" in arguments,
+                quiz="quiz" in arguments,
+                show="--show" in arguments,
+                live_lesson="--live-lesson" in arguments,
+            ),
             loop_factory=asyncio.SelectorEventLoop,
         )
     )

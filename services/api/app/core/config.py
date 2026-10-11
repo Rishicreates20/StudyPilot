@@ -85,6 +85,21 @@ class Settings(BaseSettings):
     # once (each is a model call; a learner reading one topic rarely needs more than two waiting).
     lesson_jobs_per_user_per_day: int = Field(default=60, ge=1, le=2000)
     lesson_jobs_active_per_user: int = Field(default=2, ge=1, le=10)
+    # Quizzes a learner may have written per rolling 24 hours (each is a model call), and the shape
+    # of one: how many questions, and how many of them are short answers (graded by a model).
+    quiz_jobs_per_user_per_day: int = Field(default=30, ge=1, le=1000)
+    quiz_question_count: int = Field(default=5, ge=3, le=10)
+    quiz_short_answers: int = Field(default=1, ge=0, le=2)
+
+    # --- Mastery (transparent product rules, not model output; see app/learning/mastery.py) -----
+    # A topic scoring below the first threshold needs practice; from the second it counts as
+    # mastered; in between it is progressing.
+    mastery_needs_practice_below: float = Field(default=70.0, ge=1, le=99)
+    mastery_mastered_from: float = Field(default=90.0, ge=2, le=100)
+    # Each older attempt counts this much of the one after it (1 = all attempts count equally).
+    mastery_recency_decay: float = Field(default=0.7, gt=0, le=1)
+    # Fewer answers than this and a score is shown as an early estimate.
+    mastery_min_answers: int = Field(default=4, ge=1, le=50)
 
     # --- AI provider (used by the worker; the API only checks that it is configured) -----------
     llm_provider: LlmProviderName | None = None
@@ -210,6 +225,10 @@ class Settings(BaseSettings):
                 )
         if self.db_pool_min_size > self.db_pool_max_size:
             raise ValueError("DB_POOL_MIN_SIZE must not exceed DB_POOL_MAX_SIZE")
+        if self.mastery_needs_practice_below >= self.mastery_mastered_from:
+            raise ValueError(
+                "MASTERY_NEEDS_PRACTICE_BELOW must be lower than MASTERY_MASTERED_FROM"
+            )
         if hardened and self.llm_provider is LlmProviderName.FAKE:
             raise ValueError(
                 "LLM_PROVIDER=fake is a test double and is not allowed in staging or production"
