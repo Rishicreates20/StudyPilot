@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlparse
 from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.ai.fallback_config import FallbackConfigError, FallbackProvider, parse_fallbacks
+
 EX_CONFIG = 78  # sysexits.h: configuration error
 
 _SECURE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
@@ -158,6 +160,11 @@ class Settings(BaseSettings):
     # the model's own default. A model that does not accept the level is asked without it.
     gemini_thinking_level: Literal["", "minimal", "low", "medium", "high"] = ""
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    # Other providers that speak the OpenAI chat format, tried in order when Gemini is out of
+    # allowance or unavailable: a JSON list, see app/ai/fallback_config.py. It carries API keys, so
+    # the whole value is a secret. Empty means no fallback. Embeddings and reading pictures never
+    # fall back (every vector comes from one recorded model).
+    llm_fallbacks: SecretStr | None = None
     llm_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     llm_max_output_tokens: int = Field(default=24000, ge=1024, le=65536)
     llm_temperature: float = Field(default=0.4, ge=0, le=2)
@@ -211,10 +218,22 @@ class Settings(BaseSettings):
             raise ValueError("must not include a path, query or fragment")
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    @field_validator("database_url", "supabase_jwt_secret", "gemini_api_key", mode="before")
+    @field_validator(
+        "database_url", "supabase_jwt_secret", "gemini_api_key", "llm_fallbacks", mode="before"
+    )
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("llm_fallbacks")
+    @classmethod
+    def _check_llm_fallbacks(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            try:
+                parse_fallbacks(value.get_secret_value())
+            except FallbackConfigError as exc:
+                raise ValueError(str(exc)) from None  # names entries and fields, never values
+        return value
 
     @field_validator("llm_provider", mode="before")
     @classmethod
@@ -310,6 +329,13 @@ class Settings(BaseSettings):
         """The model to use first, then the fallbacks, each once and in order."""
         names = [self.gemini_model, *self.gemini_fallback_models.split(",")]
         return tuple(dict.fromkeys(name for name in names if name))
+
+    @property
+    def llm_fallback_providers(self) -> tuple[FallbackProvider, ...]:
+        """The extra providers behind the main one (validated when the settings were loaded)."""
+        if self.llm_fallbacks is None:
+            return ()
+        return parse_fallbacks(self.llm_fallbacks.get_secret_value())
 
     @property
     def ai_configured(self) -> bool:
