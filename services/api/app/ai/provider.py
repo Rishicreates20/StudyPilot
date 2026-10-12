@@ -171,12 +171,16 @@ class LLMQuotaExhausted(LLMError):
     def __init__(self, detail: str = "", *, retry_after: float | None = None) -> None:
         super().__init__(detail, retry_after=retry_after)
         if retry_after is not None and retry_after > 0:
-            hours = max(1, round(retry_after / 3600))
-            unit = "hour" if hours == 1 else "hours"
+            # A wait under an hour is said in minutes: "about 1 hour" for a 60-second wait is wrong.
+            if retry_after < 3600:
+                amount, unit = max(1, round(retry_after / 60)), "minute"
+            else:
+                amount, unit = round(retry_after / 3600), "hour"
+            plural = "" if amount == 1 else "s"
             self.user_message = (
                 "The AI service's daily allowance for this account is used up, so nothing could "
-                f"be written. It resets in about {hours} {unit}. You can also ask whoever runs "
-                "this server to switch the AI model or enable billing."
+                f"be written. It resets in about {amount} {unit}{plural}. You can also ask whoever "
+                "runs this server to switch the AI model or enable billing."
             )
 
 
