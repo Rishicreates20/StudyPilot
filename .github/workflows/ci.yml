@@ -23,10 +23,12 @@ jobs:
         working-directory: services/api
     # A real PostgreSQL for the database tests. The suite applies the Supabase stand-in
     # (tests/support/supabase_stub.sql) and every file in supabase/migrations to it. The genuine
-    # Supabase stack is exercised separately by the supabase-stack job below.
+    # Supabase stack is exercised separately by the supabase-stack job below. The image is stock
+    # PostgreSQL 16 plus the pgvector extension (study documents store embeddings); the tag is an
+    # exact release that exists on Docker Hub (checked 2026-10-12), 0.8.0 being what Supabase ships.
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:0.8.0-pg16
         env:
           POSTGRES_PASSWORD: postgres
         ports:

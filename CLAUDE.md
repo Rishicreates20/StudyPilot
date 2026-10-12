@@ -72,6 +72,7 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 - Zod: use `z.url({ protocol: /^https?$/ })`, not `z.httpUrl()` (it rejects `localhost` and `http://api:8000`).
 - `npx shadcn init/add` puts the `shadcn` package under `dependencies`; keep it in `devDependencies` (it is only used for `@import "shadcn/tailwind.css"` at build time) or `npm audit --omit=dev` fails in CI.
 - GitHub Actions: pin exact existing tags and check them with `GET /repos/<owner>/<repo>/git/ref/tags/<tag>`; some actions (for example `astral-sh/setup-uv`) publish no floating major tag like `v10`.
+- CI's API job runs its tests against a PostgreSQL service container, and the documents migration needs **pgvector**: the service image is `pgvector/pgvector:0.8.0-pg16` (an exact tag, checked on Docker Hub); stock `postgres:16` fails with `extension "vector" is not available`. A genuine-stack test that expects a write to be refused must use a move the guard really refuses (a ready document set to `ready` again is no change, so it is allowed).
 
 ## Dev-environment gotchas (primary machine: Windows 11 Home)
 

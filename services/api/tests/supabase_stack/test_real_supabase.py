@@ -980,8 +980,10 @@ def test_the_real_roles_see_only_their_own_documents_and_cannot_write_the_worker
         seen = database.execute("select id from public.source_documents").fetchall()
         assert [str(row["id"]) for row in seen] == [document["id"]]
 
+    # Ada's document is already ready (the worker finished it), so setting it to ready again would
+    # be no change at all; 'failed' is a move only the worker may make.
     for statement in (
-        "update public.source_documents set status = 'ready'",
+        "update public.source_documents set status = 'failed'",
         "update public.source_documents set sha256 = repeat('0', 64)",
         "insert into public.document_pages (user_id, document_id, page_number, text, source)"
         " select user_id, id, 99, 'x', 'text' from public.source_documents",
