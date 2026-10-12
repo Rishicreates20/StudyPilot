@@ -6,13 +6,16 @@ learner's own lessons and to the lesson's real sections.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from app.ai.lesson.schema import Lesson
+from app.ai.lesson.schema import Lesson, SourceReference
 from app.core.db import UserConnection
+from app.retrieval.search import position_text
 from app.schemas.lessons import (
+    Citation,
     ItemStudy,
     LessonDetail,
     LessonVersion,
@@ -169,6 +172,9 @@ async def get_detail(
     row = await cursor.fetchone()
     if row is None:
         return None
+    # Re-validated on every read: a stored document that no longer fits the model is an error,
+    # not something to render.
+    content = Lesson.model_validate(row["content"])
     return LessonDetail(
         id=row["id"],
         version=row["version"],
@@ -179,16 +185,81 @@ async def get_detail(
         created_at=row["created_at"],
         item_id=row["item_id"],
         language=row["language"],
-        # Re-validated on every read: a stored document that no longer fits the model is an error,
-        # not something to render.
-        content=Lesson.model_validate(row["content"]),
+        content=content,
         content_version=row["content_version"],
         revision_feedback=row["revision_feedback"],
         based_on_lesson_id=row["based_on_lesson_id"],
         prompt_version=row["prompt_version"],
         provider=row["provider"],
         model_id=row["model_id"],
+        citations=await resolve_citations(connection, user_id, content.source_references),
     )
+
+
+_EXCERPT_CHARS = 400
+
+
+async def resolve_citations(
+    connection: UserConnection, user_id: UUID, references: Sequence[SourceReference]
+) -> list[Citation]:
+    """Look up the passages a lesson cites; one that no longer exists is marked unavailable."""
+    if not references:
+        return []
+    wanted: list[UUID] = []
+    for reference in references:
+        try:
+            wanted.append(UUID(reference.chunk_id))
+        except ValueError:
+            continue  # not an identifier of ours: shown as unavailable below
+    found: dict[UUID, dict[str, Any]] = {}
+    if wanted:
+        cursor = await connection.execute(
+            "select c.id, c.document_id, d.title, d.paginated, c.page_start, c.page_end, c.content"
+            " from public.document_chunks c"
+            " join public.source_documents d on d.id = c.document_id and d.user_id = c.user_id"
+            " where c.user_id = %s and c.id = any(%s)",
+            (user_id, wanted),
+        )
+        found = {row["id"]: row for row in await cursor.fetchall()}
+    citations: list[Citation] = []
+    for reference in references:
+        try:
+            row = found.get(UUID(reference.chunk_id))
+        except ValueError:
+            row = None
+        if row is None:
+            citations.append(
+                Citation(
+                    source_id=reference.source_id,
+                    chunk_id=reference.chunk_id,
+                    note=reference.note,
+                    available=False,
+                )
+            )
+            continue
+        content: str = row["content"]
+        citations.append(
+            Citation(
+                source_id=reference.source_id,
+                chunk_id=reference.chunk_id,
+                note=reference.note,
+                available=True,
+                document_id=row["document_id"],
+                document_title=row["title"],
+                position=position_text(
+                    paginated=row["paginated"],
+                    page_start=row["page_start"],
+                    page_end=row["page_end"],
+                ),
+                page_start=row["page_start"],
+                excerpt=(
+                    content
+                    if len(content) <= _EXCERPT_CHARS
+                    else content[:_EXCERPT_CHARS].rsplit(" ", 1)[0] + " ..."
+                ),
+            )
+        )
+    return citations
 
 
 async def get_current_id(connection: UserConnection, user_id: UUID, item_id: UUID) -> UUID | None:

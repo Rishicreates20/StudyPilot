@@ -73,6 +73,7 @@ export function document(overrides: Partial<LessonDocument> = {}): LessonDocumen
       analogy: "Like a library book with one borrower.",
     },
     source_references: [],
+    grounding: "none",
     ...overrides,
   };
 }
@@ -93,7 +94,7 @@ export function lesson(overrides: Partial<LessonDetail> = {}): LessonDetail {
     content_version: 1,
     revision_feedback: null,
     based_on_lesson_id: null,
-    prompt_version: "lesson-writer/v1",
+    prompt_version: "lesson-writer/v2",
     provider: "gemini",
     model_id: "gemini-3.6-flash",
     ...overrides,
@@ -130,6 +131,7 @@ export function lessonJob(overrides: Partial<GenerationJob> = {}): GenerationJob
     roadmap_id: null,
     lesson_id: null,
     attempt_id: null,
+    document_id: null,
     quiz_id: null,
     created_at: "2026-10-11T10:00:00Z",
     started_at: "2026-10-11T10:00:01Z",

@@ -11,9 +11,10 @@ timeouts), or stop now (a rejected key, blocked content, a request the provider 
 or keys.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from enum import StrEnum
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -51,6 +52,48 @@ class StructuredResult[T: BaseModel]:
     synthetic: bool = False
 
 
+# Every vector in the database has exactly this many numbers (ADR-008): the column type is fixed
+# before the first row is written, so a provider that returns anything else is an error, not data.
+EMBEDDING_DIMENSIONS = 1536
+
+
+class EmbeddingTask(StrEnum):
+    """What a vector is for. Retrieval models embed a question and a passage differently."""
+
+    DOCUMENT = "document"
+    QUERY = "query"
+
+
+@dataclass(frozen=True)
+class EmbeddingResult:
+    # One vector per input text, in the same order, each of ``EMBEDDING_DIMENSIONS`` numbers and
+    # scaled to length 1 (so cosine similarity and dot product agree).
+    vectors: list[list[float]]
+    provider: str
+    model_id: str
+    usage: Usage
+    latency_ms: int
+    synthetic: bool = False
+
+
+Legibility = Literal["clear", "partly", "poor", "none"]
+
+
+@dataclass(frozen=True)
+class OcrResult:
+    """The text a vision model read from one image (or one page), and how sure it was."""
+
+    text: str
+    # `clear` printed or neat text; `partly` some words were guesses; `poor` mostly guesses;
+    # `none` nothing readable. Anything but `clear` is shown to the learner to check.
+    legibility: Legibility
+    provider: str
+    model_id: str
+    usage: Usage
+    latency_ms: int
+    synthetic: bool = False
+
+
 class LLMProvider(Protocol):
     name: str
 
@@ -58,6 +101,14 @@ class LLMProvider(Protocol):
         self, request: StructuredRequest, schema: type[T]
     ) -> StructuredResult[T]:
         """Return a ``schema`` instance, or raise an ``LLMError``."""
+        ...
+
+    async def embed(self, texts: Sequence[str], task: EmbeddingTask) -> EmbeddingResult:
+        """One unit-length vector of ``EMBEDDING_DIMENSIONS`` numbers per text, or ``LLMError``."""
+        ...
+
+    async def read_image_text(self, image: bytes, mime_type: str) -> OcrResult:
+        """Transcribe an image (or a single-page PDF) as data; never act on what it says."""
         ...
 
 
@@ -93,6 +144,40 @@ class LLMRejected(LLMError):
 class LLMBlocked(LLMError):
     code = "AI_CONTENT_BLOCKED"
     user_message = "The AI provider declined to produce a plan for this goal."
+
+
+class OcrUnavailable(LLMError):
+    """This server has no model that can read images (for example the built-in test provider)."""
+
+    code = "OCR_UNAVAILABLE"
+    user_message = "Reading text from images or scanned pages isn't available on this server."
+
+
+class LLMQuotaExhausted(LLMError):
+    """A daily allowance (a free tier's requests per day) is used up: waiting minutes won't help.
+
+    Not retryable: the job fails at once with a message that says when it resets, instead of
+    spending its attempts (and the learner's patience) on calls that cannot succeed.
+    """
+
+    code = "AI_QUOTA_EXHAUSTED"
+    retryable = False
+    user_message = (
+        "The AI service's daily allowance for this account is used up, so nothing could be "
+        "written. Try again tomorrow, or ask whoever runs this server to switch the AI model or "
+        "enable billing."
+    )
+
+    def __init__(self, detail: str = "", *, retry_after: float | None = None) -> None:
+        super().__init__(detail, retry_after=retry_after)
+        if retry_after is not None and retry_after > 0:
+            hours = max(1, round(retry_after / 3600))
+            unit = "hour" if hours == 1 else "hours"
+            self.user_message = (
+                "The AI service's daily allowance for this account is used up, so nothing could "
+                f"be written. It resets in about {hours} {unit}. You can also ask whoever runs "
+                "this server to switch the AI model or enable billing."
+            )
 
 
 class LLMRateLimited(LLMError):

@@ -20,8 +20,8 @@ from app.ai.calls import CallRecord
 from app.core.db import SystemConnection
 
 _JOB_COLUMNS = (
-    "id, user_id, goal_id, item_id, attempt_id, job_type, attempts, max_attempts, request,"
-    " checkpoint, cancel_requested"
+    "id, user_id, goal_id, item_id, attempt_id, document_id, job_type, attempts, max_attempts,"
+    " request, checkpoint, cancel_requested"
 )
 
 
@@ -34,6 +34,8 @@ class Job:
     item_id: UUID | None
     # The quiz attempt a grading job marks; None for every other kind of job.
     attempt_id: UUID | None
+    # The document a document job processes; None for every other kind of job.
+    document_id: UUID | None
     job_type: str
     attempts: int
     max_attempts: int
@@ -49,6 +51,7 @@ def _job(row: dict[str, Any]) -> Job:
         goal_id=row["goal_id"],
         item_id=row["item_id"],
         attempt_id=row["attempt_id"],
+        document_id=row["document_id"],
         job_type=row["job_type"],
         attempts=row["attempts"],
         max_attempts=row["max_attempts"],

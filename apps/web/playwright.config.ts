@@ -40,6 +40,12 @@ for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL", "DATABASE_URL"])
   }
 }
 
+/**
+ * Uploaded files go to a folder on this machine in these tests (the API and the worker must agree
+ * on it, and neither is given a Supabase Storage key). It is the API's own ignored `.data` folder.
+ */
+const documentStorage = { DOCUMENT_STORAGE: "local", DOCUMENT_LOCAL_DIR: ".data/e2e-documents" };
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.e2e.ts",
@@ -68,14 +74,19 @@ export default defineConfig({
       timeout: 120_000,
       // The API only checks that an AI provider is configured; the built-in test provider labels
       // everything it makes as a sample, so these tests never call a real model.
-      env: { LLM_PROVIDER: "fake" },
+      env: { LLM_PROVIDER: "fake", ...documentStorage },
     },
     {
       // Runs the queued roadmap jobs. It has no port, so Playwright waits for its start-up line.
       command: "uv run --directory ../../services/api python -m app.worker",
       wait: { stdout: /worker\.started/ },
       timeout: 120_000,
-      env: { LLM_PROVIDER: "fake", WORKER_POLL_SECONDS: "1", JOB_RETRY_BASE_SECONDS: "1" },
+      env: {
+        LLM_PROVIDER: "fake",
+        WORKER_POLL_SECONDS: "1",
+        JOB_RETRY_BASE_SECONDS: "1",
+        ...documentStorage,
+      },
     },
     {
       command: "npm run start -- --hostname 127.0.0.1",

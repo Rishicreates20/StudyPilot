@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.v1 import goals, lessons, me, quizzes, roadmaps
+from app.api.v1 import documents, goals, lessons, me, quizzes, roadmaps
 from app.core.errors import ProblemDetail
 from app.core.security import get_principal
 
@@ -19,3 +19,4 @@ router.include_router(goals.router)
 router.include_router(roadmaps.router)
 router.include_router(lessons.router)
 router.include_router(quizzes.router)
+router.include_router(documents.router)

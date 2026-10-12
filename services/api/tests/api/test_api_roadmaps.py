@@ -201,7 +201,7 @@ def test_the_response_exposes_no_internal_fields(
     assert set(job) == {
         "id", "goal_id", "job_type", "status", "stage", "progress", "attempts", "max_attempts",
         "cancel_requested", "error_code", "error_message", "roadmap_id", "created_at", "item_id",
-        "lesson_id", "attempt_id", "quiz_id", "started_at", "finished_at",
+        "lesson_id", "attempt_id", "document_id", "quiz_id", "started_at", "finished_at",
     }  # fmt: skip
 
 

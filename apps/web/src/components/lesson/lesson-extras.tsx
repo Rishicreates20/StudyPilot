@@ -1,9 +1,12 @@
 import { BookOpenCheckIcon, CircleXIcon, FileTextIcon, InfoIcon } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Inline } from "@/components/lesson/lesson-blocks";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { LessonDocument } from "@/lib/api/server";
+import type { Citation, LessonDocument } from "@/lib/api/server";
+import { documentPath } from "@/lib/documents/paths";
 
 function ExtraSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -116,39 +119,73 @@ export function SummaryList({ summary }: { summary: string[] }) {
 }
 
 /**
- * Where the lesson's explanation comes from. A lesson that cites the learner's own material lists
- * each passage it used; one that does not says plainly that it is written from general knowledge,
- * so it is never taken for something checked against a document.
+ * Where the lesson's explanation comes from.
+ *
+ * - A lesson that cites the learner's own documents lists each passage it used: the document, where
+ *   in it, the lesson's note, and the passage itself, looked up as it is now (a document deleted
+ *   since shows as unavailable, with no copy of its text).
+ * - A lesson written while the learner had documents, but none that covered the topic, says so
+ *   plainly rather than pretending to rest on them.
+ * - Any other lesson says it is written from general knowledge, so it is never taken for
+ *   something checked against a document.
  */
-export function Sources({ references }: { references: LessonDocument["source_references"] }) {
-  if (references.length === 0) {
+export function Sources({
+  goalId,
+  grounding,
+  references,
+  citations = [],
+}: {
+  goalId: string;
+  grounding: LessonDocument["grounding"];
+  references: LessonDocument["source_references"];
+  citations?: readonly Citation[];
+}) {
+  if (references.length === 0 || grounding !== "sources") {
     return (
       <p className="flex items-start gap-2 text-sm text-muted-foreground">
         <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        This lesson is written from general knowledge, not from your own material, and has no
-        sources to cite. Check anything important against a source you trust.
+        {grounding === "no_match"
+          ? "You have study material for this goal, but nothing in it covered this topic closely enough, so this lesson is written from general knowledge, not from your documents. Check anything important against a source you trust."
+          : "This lesson is written from general knowledge, not from your own material, and has no sources to cite. Check anything important against a source you trust."}
       </p>
     );
   }
   return (
     <ExtraSection id="sources" title="Sources">
-      <ol className="space-y-2 text-sm">
-        {references.map((reference) => (
-          <li
-            key={`${reference.source_id}:${reference.chunk_id}`}
-            className="flex items-start gap-2 rounded-lg border bg-card p-3"
-          >
-            <FileTextIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-            <span>
-              <span className="font-medium">Your material</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · source {reference.source_id}, passage {reference.chunk_id}
-              </span>
-              {reference.note ? <span className="block">{reference.note}</span> : null}
-            </span>
-          </li>
-        ))}
+      <p className="text-sm text-muted-foreground">
+        This lesson draws on these passages from your own documents.
+      </p>
+      <ol className="space-y-3 text-sm">
+        {references.map((reference) => {
+          const citation = citations.find((candidate) => candidate.chunk_id === reference.chunk_id);
+          return (
+            <li
+              key={`${reference.source_id}:${reference.chunk_id}`}
+              className="space-y-2 rounded-lg border bg-card p-3"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <FileTextIcon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {citation?.available && citation.document_id ? (
+                  <Link
+                    href={documentPath(goalId, citation.document_id)}
+                    className="rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    {citation.document_title}
+                  </Link>
+                ) : (
+                  <span className="font-medium">A document you have since deleted</span>
+                )}
+                {citation?.position ? <Badge variant="outline">{citation.position}</Badge> : null}
+              </div>
+              {reference.note ? <p className="text-muted-foreground">{reference.note}</p> : null}
+              {citation?.excerpt ? (
+                <blockquote className="border-l-2 border-primary/40 pl-3 leading-6 text-muted-foreground">
+                  {citation.excerpt}
+                </blockquote>
+              ) : null}
+            </li>
+          );
+        })}
       </ol>
     </ExtraSection>
   );

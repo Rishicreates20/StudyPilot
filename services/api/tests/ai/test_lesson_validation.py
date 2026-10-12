@@ -88,25 +88,24 @@ def test_a_block_is_converted_to_its_own_typed_shape() -> None:
 
 
 @pytest.mark.parametrize(
-    ("block", "message"),
+    "block",
     [
-        ({"type": "paragraph", "text": "  "}, "paragraph with no text"),
-        ({"type": "list", "items": ["", "   "]}, "list with no items"),
-        ({"type": "code", "code": "\n"}, "code block with no code"),
-        ({"type": "callout", "callout_kind": "tip", "text": ""}, "callout with no text"),
+        {"type": "paragraph", "text": "  "},
+        {"type": "list", "items": ["", "   "]},
+        {"type": "code", "code": "\n"},
+        {"type": "callout", "callout_kind": "tip", "text": "", "title": "A title and nothing else"},
     ],
 )
-def test_a_block_missing_what_its_type_needs_is_reported(
-    block: dict[str, Any], message: str
+def test_a_block_with_no_content_is_dropped_not_a_reason_to_reject_the_lesson(
+    block: dict[str, Any],
 ) -> None:
     draft = changed(valid_draft(), lambda d: d["sections"][1]["blocks"].append(block))
+    expected = valid_lesson()
 
     lesson, violations = build_lesson(draft)
 
-    assert lesson is None
-    assert codes(violations) == {"EMPTY_BLOCK"}
-    assert message in violations[0].message
-    assert "The main idea" in violations[0].message
+    assert violations == [] and lesson is not None
+    assert lesson.sections[1].blocks == expected.sections[1].blocks  # as if it was never there
 
 
 def test_a_section_with_nothing_in_it_is_reported() -> None:
@@ -116,7 +115,7 @@ def test_a_section_with_nothing_in_it_is_reported() -> None:
     lesson, violations = build_lesson(changed(valid_draft(), edit))
 
     assert lesson is None
-    assert codes(violations) == {"EMPTY_BLOCK", "EMPTY_SECTION"}
+    assert codes(violations) == {"EMPTY_SECTION"}
 
 
 def test_a_repeated_definition_or_source_is_dropped_not_rejected() -> None:

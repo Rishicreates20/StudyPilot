@@ -1,16 +1,15 @@
 "use client";
 
 import { LoaderCircleIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { POLL_INTERVAL_MS, useServerRefresh } from "@/components/jobs/use-server-refresh";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { ProgressBar } from "@/components/progress/progress-bar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GenerationJob } from "@/lib/api/server";
 
-/** How often the page asks the server for the job's current state. */
-export const POLL_INTERVAL_MS = 2_000;
+export { POLL_INTERVAL_MS };
 /** After this long still waiting for a worker to pick the job up, say so. */
 export const SLOW_START_MS = 45_000;
 
@@ -47,13 +46,8 @@ export function JobProgress({
   stageText,
   cancelAction,
 }: JobProgressProps) {
-  const router = useRouter();
+  useServerRefresh();
   const [slowStart, setSlowStart] = useState(false);
-
-  useEffect(() => {
-    const timer = setInterval(() => router.refresh(), POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [router]);
 
   useEffect(() => {
     const created = Date.parse(job.created_at);

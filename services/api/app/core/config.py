@@ -7,6 +7,7 @@ into logs or terminals. Secrets are typed ``SecretStr`` so they also never appea
 ``repr()`` output.
 """
 
+import re
 import sys
 from enum import StrEnum
 from functools import lru_cache
@@ -41,6 +42,13 @@ class LlmProviderName(StrEnum):
 
     GEMINI = "gemini"
     FAKE = "fake"  # a deterministic test double; refused in staging and production
+
+
+class DocumentStorageName(StrEnum):
+    """Where uploaded files are kept (never in a public bucket, never served inline)."""
+
+    SUPABASE = "supabase"  # a private Supabase Storage bucket, reached with the learner's own token
+    LOCAL = "local"  # a folder on this machine: local development and tests, refused in production
 
 
 class Settings(BaseSettings):
@@ -101,6 +109,38 @@ class Settings(BaseSettings):
     # Fewer answers than this and a score is shown as an early estimate.
     mastery_min_answers: int = Field(default=4, ge=1, le=50)
 
+    # --- Documents: uploads, extraction, embeddings and retrieval (ADR-039...043) -------------
+    # The publishable key is public by design. The Storage gateway wants it next to the learner's
+    # own token; the API never needs (and this project never uses) the service-role key.
+    supabase_publishable_key: str | None = None
+    document_storage: DocumentStorageName = DocumentStorageName.SUPABASE
+    # Only for DOCUMENT_STORAGE=local (a path relative to the API's working directory is fine).
+    document_local_dir: str = Field(default=".data/documents", min_length=1, max_length=300)
+    document_bucket: str = Field(default="documents", pattern=r"^[a-z0-9][a-z0-9_-]{1,62}$")
+    # What one uploaded file, and the text taken from it, may weigh. Larger is refused up front.
+    document_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    document_max_pages: int = Field(default=300, ge=1, le=2000)
+    document_max_chars: int = Field(default=1_000_000, ge=1000, le=5_000_000)
+    # Pages of one document that may be read by the vision model (each is a model call).
+    document_max_ocr_pages: int = Field(default=20, ge=0, le=100)
+    documents_per_goal: int = Field(default=20, ge=1, le=500)
+    documents_per_user: int = Field(default=100, ge=1, le=5000)
+    # Document jobs (processing, re-processing, indexing after a review) per rolling 24 hours.
+    document_jobs_per_user_per_day: int = Field(default=100, ge=1, le=2000)
+    # How long the signed link that lets the worker read an uploaded file stays valid.
+    document_signed_url_seconds: int = Field(default=3600, ge=60, le=86400)
+    # The vectors are 1536 numbers (the database column is fixed at that size, ADR-008); the model
+    # name is recorded with every chunk so a change is visible and can be re-indexed.
+    embedding_model: str = Field(default="gemini-embedding-001", min_length=1, max_length=100)
+    # Chunks are about this long (in characters) with this much repeated from the one before.
+    chunk_target_chars: int = Field(default=1200, ge=300, le=4000)
+    chunk_overlap_chars: int = Field(default=200, ge=0, le=1000)
+    # Passages a lesson (or a search) gets, and how similar one must be to the question to count.
+    retrieval_top_k: int = Field(default=6, ge=1, le=20)
+    retrieval_min_similarity: float = Field(default=0.58, ge=0, le=1)
+    # Searches a learner may run per rolling hour: each embeds one short query with the provider.
+    document_searches_per_user_per_hour: int = Field(default=120, ge=1, le=5000)
+
     # --- AI provider (used by the worker; the API only checks that it is configured) -----------
     llm_provider: LlmProviderName | None = None
     # A secret: server-only, never logged, never sent to the browser.
@@ -108,6 +148,15 @@ class Settings(BaseSettings):
     # Measured on the owner's key (2026-10-11), same roadmap request: gemini-3.5-flash-lite 6 s,
     # gemini-3.6-flash 18 s, gemini-3.8-flash 96 s (and "high demand" 503s at other times).
     gemini_model: str = Field(default="gemini-3.6-flash", min_length=1, max_length=100)
+    # Other models to try, in order, when the one above has used up its allowance or is overloaded.
+    # A free-tier key has a separate daily allowance per model, so a list stretches it. Comma
+    # separated; an empty value means no fallback.
+    gemini_fallback_models: str = Field(default="", max_length=500)
+    # How much a Gemini 3 model may "think" before it answers. Thinking tokens come out of the same
+    # output budget as the answer, so a high level makes long documents slow and can cut them off
+    # (MAX_TOKENS). "low" is much faster for the structured writing this app asks for. Empty means
+    # the model's own default. A model that does not accept the level is asked without it.
+    gemini_thinking_level: Literal["", "minimal", "low", "medium", "high"] = ""
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     llm_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     llm_max_output_tokens: int = Field(default=24000, ge=1024, le=65536)
@@ -121,6 +170,11 @@ class Settings(BaseSettings):
     job_retry_base_seconds: float = Field(default=5.0, ge=0, le=600)
     worker_poll_seconds: float = Field(default=2.0, gt=0, le=60)
     worker_concurrency: int = Field(default=1, ge=1, le=8)
+
+    @field_validator("supabase_publishable_key", mode="before")
+    @classmethod
+    def _blank_publishable_key_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
@@ -229,11 +283,33 @@ class Settings(BaseSettings):
             raise ValueError(
                 "MASTERY_NEEDS_PRACTICE_BELOW must be lower than MASTERY_MASTERED_FROM"
             )
+        if self.chunk_overlap_chars >= self.chunk_target_chars // 2:
+            raise ValueError("CHUNK_OVERLAP_CHARS must be less than half of CHUNK_TARGET_CHARS")
+        if hardened and self.document_storage is DocumentStorageName.LOCAL:
+            raise ValueError(
+                "DOCUMENT_STORAGE=local keeps files on this machine's disk and is not allowed in "
+                "staging or production"
+            )
         if hardened and self.llm_provider is LlmProviderName.FAKE:
             raise ValueError(
                 "LLM_PROVIDER=fake is a test double and is not allowed in staging or production"
             )
         return self
+
+    @field_validator("gemini_fallback_models")
+    @classmethod
+    def _check_fallback_models(cls, value: str) -> str:
+        names = [part.strip() for part in value.split(",") if part.strip()]
+        for name in names:
+            if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", name):
+                raise ValueError("GEMINI_FALLBACK_MODELS must be comma-separated model names")
+        return ",".join(names)
+
+    @property
+    def gemini_models(self) -> tuple[str, ...]:
+        """The model to use first, then the fallbacks, each once and in order."""
+        names = [self.gemini_model, *self.gemini_fallback_models.split(",")]
+        return tuple(dict.fromkeys(name for name in names if name))
 
     @property
     def ai_configured(self) -> bool:

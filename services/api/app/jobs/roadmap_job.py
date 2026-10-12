@@ -13,8 +13,9 @@ import structlog
 from app.ai.calls import CallRecord
 from app.ai.provider import LLMNotConfigured
 from app.ai.roadmap.context import build_context, readiness_problems
+from app.ai.roadmap.material import ground_evidence
 from app.ai.roadmap.planner import plan_roadmap
-from app.jobs import queue, store
+from app.jobs import queue, roadmap_material, store
 from app.jobs.errors import JobFailure, LeaseLost
 from app.jobs.queue import Job
 from app.jobs.runtime import Lease, WorkerEnv, as_uuid, set_stage
@@ -61,8 +62,10 @@ async def run_roadmap(env: WorkerEnv, job: Job, lease: Lease) -> None:
         if feedback and based_on is not None:
             async with env.database.system_session() as connection:
                 outline = await store.load_outline(connection, job.user_id, based_on)
+        async with env.database.system_session() as connection:
+            material = await roadmap_material.load_material(connection, job.user_id, job.goal_id)
         context = build_context(
-            goal, today=env.today(), feedback=feedback, previous_outline=outline
+            goal, today=env.today(), material=material, feedback=feedback, previous_outline=outline
         )
 
         async def observe(record: CallRecord) -> None:
@@ -71,7 +74,7 @@ async def run_roadmap(env: WorkerEnv, job: Job, lease: Lease) -> None:
 
         outcome = await plan_roadmap(env.provider, context, observer=observe)
         lease.check()
-        plan = outcome.plan
+        plan = ground_evidence(outcome.plan, material)
         meta = store.PlanMeta(
             prompt_version=outcome.prompt_version,
             provider=outcome.provider,

@@ -7,7 +7,7 @@ worker owns the job now because this one was too slow).
 
 import asyncio
 import random
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import date
@@ -20,6 +20,7 @@ import structlog
 from app.ai.provider import LLMProvider
 from app.core.config import Settings
 from app.core.db import Database
+from app.documents.storage import DocumentFiles
 from app.jobs import queue
 from app.jobs.errors import JobCancelled, LeaseLost
 from app.jobs.queue import Job
@@ -37,8 +38,12 @@ class WorkerEnv:
     worker_id: str
     # None when no provider is configured: model jobs then fail with AI_NOT_CONFIGURED.
     provider: LLMProvider | None
+    # Where uploaded files live; None when storage isn't configured (document jobs then fail).
+    files: DocumentFiles | None = None
     today: Callable[[], date] = today_utc
     random: Callable[[], float] = field(default=random.random)
+    # Waiting inside a job (for a rate limit to ease); tests replace it so they do not really wait.
+    sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
 
 
 def backoff_seconds(

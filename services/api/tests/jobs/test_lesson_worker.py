@@ -86,7 +86,7 @@ async def test_a_queued_job_becomes_a_stored_versioned_lesson(
     assert lesson["roadmap_id"] == seeded.roadmap and lesson["job_id"] == job
     assert (lesson["version"], lesson["status"]) == (1, "current")
     assert lesson["is_synthetic"] is True and lesson["provider"] == "fake"
-    assert lesson["prompt_version"] == "lesson-writer/v1"
+    assert lesson["prompt_version"] == "lesson-writer/v2"
     assert lesson["content_version"] == 1
     assert lesson["adjust"] is None and lesson["based_on_lesson_id"] is None
     document = Lesson.model_validate(lesson["content"])
@@ -358,7 +358,7 @@ async def test_a_validated_lesson_is_not_paid_for_twice(
 
     checkpoint = lesson_store.checkpoint_of(
         valid_lesson(),
-        lesson_store.LessonMeta("lesson-writer/v1", "fake", "fake-1", synthetic=True),
+        lesson_store.LessonMeta("lesson-writer/v2", "fake", "fake-1", synthetic=True),
     )
     admin(database_dsn).execute(
         "update public.generation_jobs set checkpoint = %s where id = %s", (Jsonb(checkpoint), job)

@@ -10,10 +10,12 @@ from pydantic import BaseModel, Field, SecretStr
 
 from app.ai.gemini import GeminiProvider
 from app.ai.provider import (
+    EmbeddingTask,
     LLMAuthError,
     LLMBlocked,
     LLMError,
     LLMInvalidOutput,
+    LLMQuotaExhausted,
     LLMRateLimited,
     LLMRejected,
     LLMTimeout,
@@ -52,6 +54,7 @@ def make_provider(handler: Handler) -> GeminiProvider:
         max_output_tokens=1234,
         temperature=0.25,
         timeout_seconds=5,
+        embedding_model="gemini-embedding-test",
     )
 
 
@@ -308,3 +311,222 @@ async def test_no_error_ever_contains_the_api_key(handler: Handler) -> None:
     assert KEY not in repr(caught.value)
     assert KEY not in caught.value.detail
     assert KEY not in caught.value.user_message
+
+
+# --- Allowances, retry hints and falling back to another model -------------------------------
+
+
+def quota_error(*, daily: bool, delay: str = "31s") -> dict[str, Any]:
+    """The shape of Google's 429 (observed live): which quota ran out, and when to try again."""
+    quota_id = (
+        "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+        if daily
+        else "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+    )
+    return {
+        "error": {
+            "code": 429,
+            "status": "RESOURCE_EXHAUSTED",
+            "message": "You exceeded your current quota. A long message with the plan name.",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": quota_id, "quotaValue": "20"}],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay},
+            ],
+        }
+    }
+
+
+async def test_a_daily_allowance_is_its_own_error_with_the_time_until_it_resets() -> None:
+    handler = respond(429, quota_error(daily=True, delay="67881s"))
+
+    with pytest.raises(LLMQuotaExhausted) as caught:
+        await call(handler)
+
+    assert caught.value.retryable is False  # waiting minutes cannot help
+    assert caught.value.code == "AI_QUOTA_EXHAUSTED"
+    assert caught.value.retry_after == 67881.0
+    assert "resets in about 19 hours" in caught.value.user_message
+
+
+async def test_a_per_minute_limit_uses_googles_own_retry_delay() -> None:
+    handler = respond(429, quota_error(daily=False, delay="31s"))
+
+    with pytest.raises(LLMRateLimited) as caught:
+        await call(handler)
+
+    assert caught.value.retryable is True and caught.value.retry_after == 31.0
+    assert not isinstance(caught.value, LLMQuotaExhausted)
+
+
+def provider_with_models(handler: Handler, *models: str) -> GeminiProvider:
+    return GeminiProvider(
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+        api_key=SecretStr(KEY),
+        model=models[0],
+        fallback_models=models[1:],
+        base_url="https://gemini.test/v1beta/",
+        max_output_tokens=1234,
+        temperature=0.25,
+        timeout_seconds=5,
+        embedding_model="gemini-embedding-test",
+    )
+
+
+def model_of(request: httpx2.Request) -> str:
+    return request.url.path.rsplit("/", 1)[-1].split(":")[0]
+
+
+async def test_when_a_models_allowance_is_used_up_the_next_model_answers() -> None:
+    asked: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        asked.append(model_of(request))
+        if model_of(request) == "model-a":
+            return httpx2.Response(429, json=quota_error(daily=True, delay="3600s"))
+        return httpx2.Response(200, json={**answer_body(), "modelVersion": ""})
+
+    provider = provider_with_models(handler, "model-a", "model-b", "model-c")
+
+    first = await provider.generate_structured(REQUEST, Answer)
+    second = await provider.generate_structured(REQUEST, Answer)
+
+    assert first.value == Answer(name="ok", count=2)
+    assert first.model_id == "model-b" and second.model_id == "model-b"
+    # The exhausted model was tried once, then left alone until its allowance returns.
+    assert asked == ["model-a", "model-b", "model-b"]
+
+
+async def test_an_overloaded_model_is_skipped_for_a_while_too() -> None:
+    asked: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        asked.append(model_of(request))
+        if model_of(request) == "model-a":
+            return httpx2.Response(
+                503, json={"error": {"status": "UNAVAILABLE", "message": "high demand"}}
+            )
+        return httpx2.Response(200, json=answer_body())
+
+    provider = provider_with_models(handler, "model-a", "model-b")
+
+    await provider.generate_structured(REQUEST, Answer)
+    await provider.generate_structured(REQUEST, Answer)
+
+    assert asked == ["model-a", "model-b", "model-b"]
+
+
+async def test_when_every_model_is_used_up_the_error_says_when_the_soonest_comes_back() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        delay = "7200s" if model_of(request) == "model-a" else "3600s"
+        return httpx2.Response(429, json=quota_error(daily=True, delay=delay))
+
+    provider = provider_with_models(handler, "model-a", "model-b")
+
+    with pytest.raises(LLMQuotaExhausted) as first:
+        await provider.generate_structured(REQUEST, Answer)
+    with pytest.raises(LLMQuotaExhausted) as again:  # both are benched now: no more requests
+        await provider.generate_structured(REQUEST, Answer)
+
+    assert first.value.retry_after == 3600.0 and "about 1 hour." in first.value.user_message
+    assert again.value.retry_after is not None and again.value.retry_after <= 3600.0
+
+
+async def test_a_rejected_key_does_not_try_the_other_models() -> None:
+    asked: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        asked.append(model_of(request))
+        return httpx2.Response(403, json={"error": {"status": "PERMISSION_DENIED"}})
+
+    provider = provider_with_models(handler, "model-a", "model-b")
+
+    with pytest.raises(LLMAuthError):
+        await provider.generate_structured(REQUEST, Answer)
+
+    assert asked == ["model-a"]
+
+
+async def test_embeddings_use_their_own_model_whatever_the_generation_models_do() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if "batchEmbedContents" in request.url.path:
+            return httpx2.Response(429, json=quota_error(daily=False, delay="12s"))
+        return httpx2.Response(200, json=answer_body())
+
+    provider = provider_with_models(handler, "model-a", "model-b")
+
+    with pytest.raises(LLMRateLimited) as caught:
+        await provider.embed(["a passage"], EmbeddingTask.DOCUMENT)
+
+    assert caught.value.retry_after == 12.0
+
+
+# --- Thinking level ---------------------------------------------------------------------------
+
+
+def provider_thinking(handler: Handler, level: str | None) -> GeminiProvider:
+    return GeminiProvider(
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+        api_key=SecretStr(KEY),
+        model="model-a",
+        base_url="https://gemini.test/v1beta/",
+        max_output_tokens=1234,
+        temperature=0.25,
+        timeout_seconds=5,
+        embedding_model="gemini-embedding-test",
+        thinking_level=level,
+    )
+
+
+async def test_the_thinking_level_is_sent_when_one_is_configured() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(json.loads(request.content)["generationConfig"])
+        return httpx2.Response(200, json=answer_body())
+
+    await provider_thinking(handler, "low").generate_structured(REQUEST, Answer)
+    await provider_thinking(handler, None).generate_structured(REQUEST, Answer)
+
+    assert seen[0]["thinkingConfig"] == {"thinkingLevel": "low"}
+    assert "thinkingConfig" not in seen[1]
+    assert seen[0]["maxOutputTokens"] == 1234  # the rest of the configuration is untouched
+
+
+async def test_a_model_that_refuses_the_level_is_asked_again_without_it_and_remembered() -> None:
+    seen: list[bool] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        has_level = "thinkingConfig" in json.loads(request.content)["generationConfig"]
+        seen.append(has_level)
+        if has_level:
+            return httpx2.Response(
+                400,
+                json={
+                    "error": {
+                        "status": "INVALID_ARGUMENT",
+                        "message": "Thinking level LOW is not supported for this model.",
+                    }
+                },
+            )
+        return httpx2.Response(200, json=answer_body())
+
+    provider = provider_thinking(handler, "low")
+
+    first = await provider.generate_structured(REQUEST, Answer)
+    second = await provider.generate_structured(REQUEST, Answer)
+
+    assert first.value == second.value == Answer(name="ok", count=2)
+    assert seen == [True, False, False]  # tried once, then never again for this model
+
+
+async def test_an_unrelated_rejection_is_not_mistaken_for_a_thinking_problem() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            400, json={"error": {"status": "INVALID_ARGUMENT", "message": "Bad schema."}}
+        )
+
+    with pytest.raises(LLMRejected):
+        await provider_thinking(handler, "low").generate_structured(REQUEST, Answer)

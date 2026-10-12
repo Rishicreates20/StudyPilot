@@ -100,7 +100,9 @@ async def test_a_lesson_that_breaks_the_rules_gets_exactly_one_repair_with_the_v
     assert validate_lesson(outcome.lesson, context) == []
 
 
-async def test_a_block_missing_its_content_is_repaired_too() -> None:
+async def test_a_block_missing_its_content_is_dropped_without_a_second_call() -> None:
+    # A hollow block carries nothing to teach or to check, so it is left out rather than costing
+    # a repair call (and, on a free tier, a request of a small daily allowance).
     context = make_context()
 
     def hollow(data: dict[str, Any]) -> None:
@@ -110,8 +112,14 @@ async def test_a_block_missing_its_content_is_repaired_too() -> None:
 
     outcome = await write_lesson(provider, context)
 
-    assert outcome.repaired is True
-    assert "code block with no code" in provider.requests[1].user
+    assert outcome.repaired is False
+    assert len(provider.requests) == 1
+    assert all(
+        block.type != "code" or block.code
+        for section in outcome.lesson.sections
+        for block in section.blocks
+    )
+    assert validate_lesson(outcome.lesson, context) == []
 
 
 async def test_an_answer_that_does_not_match_the_structure_is_repaired_too() -> None:

@@ -47,7 +47,7 @@ Three terminals:
 ```bash
 npm run dev:api      # FastAPI on http://localhost:8000   (interactive docs: /docs)
 npm run dev:web      # Next.js on http://localhost:3000
-npm run dev:worker   # runs queued background jobs: roadmap and lesson generation
+npm run dev:worker   # runs queued background jobs: roadmaps, lessons, quizzes, marking and documents
 ```
 
 The worker is a separate process that reads the same `services/api/.env`. Roadmap and lesson generation need
@@ -56,6 +56,8 @@ it, plus `LLM_PROVIDER` and (for `gemini`) `GEMINI_API_KEY` in that file: withou
 queued job simply waits (the page says so after 45 seconds). To try the whole flow with no AI key,
 set `LLM_PROVIDER=fake`: it produces a small plan clearly labelled "Sample plan" and a small lesson labelled "Sample lesson". To check the live model, run `uv run --directory services/api python -m scripts.llm_smoke` (roadmap) or `... llm_smoke lesson --show` (one lesson, printed only after it passed the checks); each makes one real call. Restart the API
 and the worker after changing either variable.
+
+**Study documents.** Uploads need file storage and the AI service. With a hosted Supabase project, set `SUPABASE_PUBLISHABLE_KEY` in `services/api/.env` (the same public key the web app uses) and apply the migrations: the private `documents` bucket and its policies come with them (see SUPABASE_SETUP.md, Storage). To try uploads with no Storage at all, set `DOCUMENT_STORAGE=local` (files go to `services/api/.data/documents`, which is git-ignored; refused in staging/production) and `LLM_PROVIDER=fake`; the API **and the worker** must use the same values and the same working directory. Restart both after changing them.
 
 `dev:api` passes `--loop asyncio:SelectorEventLoop`. The database driver (psycopg) cannot use the
 Windows default event loop; on Linux and macOS the flag changes nothing.

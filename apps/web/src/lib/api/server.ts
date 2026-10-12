@@ -394,3 +394,173 @@ export function fetchGoalProgress(accessToken: string, goalId: string): Promise<
     }),
   );
 }
+
+export type StudyDocument = components["schemas"]["Document"];
+export type DocumentList = components["schemas"]["DocumentList"];
+export type DocumentPages = components["schemas"]["DocumentPages"];
+export type DocumentPage = components["schemas"]["DocumentPage"];
+export type DocumentWarning = components["schemas"]["DocumentWarning"];
+export type SearchResult = components["schemas"]["SearchResult"];
+export type PassageHit = components["schemas"]["PassageHit"];
+export type Citation = components["schemas"]["Citation"];
+export type DocumentStatus = StudyDocument["status"];
+export type DocumentKind = StudyDocument["kind"];
+
+/** A file upload may take a while on a slow link; everything else is a quick call. */
+const UPLOAD_TIMEOUT_MS = 60_000;
+
+export function fetchDocuments(accessToken: string, goalId: string): Promise<DocumentList> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/documents", {
+      params: { path: { goal_id: goalId } },
+    }),
+  );
+}
+
+export function fetchDocument(accessToken: string, documentId: string): Promise<StudyDocument> {
+  return call(() =>
+    client(accessToken).GET("/v1/documents/{document_id}", {
+      params: { path: { document_id: documentId } },
+    }),
+  );
+}
+
+export function fetchDocumentPages(
+  accessToken: string,
+  documentId: string,
+  offset = 0,
+  limit = 20,
+): Promise<DocumentPages> {
+  return call(() =>
+    client(accessToken).GET("/v1/documents/{document_id}/pages", {
+      params: { path: { document_id: documentId }, query: { offset, limit } },
+    }),
+  );
+}
+
+/**
+ * Upload a file. The bytes go to the API as the raw request body: what the file is gets decided
+ * there from its content, never from the name or type the browser claims.
+ */
+export async function uploadDocument(
+  accessToken: string,
+  goalId: string,
+  file: File,
+  title: string | null,
+): Promise<StudyDocument> {
+  const url = new URL(`/v1/goals/${goalId}/documents`, getServerEnv().API_INTERNAL_BASE_URL);
+  url.searchParams.set("name", file.name.slice(0, 300) || "upload");
+  if (title) url.searchParams.set("title", title);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/octet-stream",
+      },
+      body: file,
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ApiError(0, "API_UNREACHABLE", "The service is unreachable right now.");
+  }
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) throw toApiError(response, body);
+  return body as StudyDocument;
+}
+
+export function pasteDocument(
+  accessToken: string,
+  goalId: string,
+  body: { title: string; text: string },
+): Promise<StudyDocument> {
+  return call(() =>
+    client(accessToken).POST("/v1/goals/{goal_id}/documents/paste", {
+      params: { path: { goal_id: goalId } },
+      body,
+    }),
+  );
+}
+
+export function renameDocument(
+  accessToken: string,
+  documentId: string,
+  title: string,
+): Promise<StudyDocument> {
+  return call(() =>
+    client(accessToken).PATCH("/v1/documents/{document_id}", {
+      params: { path: { document_id: documentId } },
+      body: { title },
+    }),
+  );
+}
+
+export function editDocumentPage(
+  accessToken: string,
+  documentId: string,
+  pageNumber: number,
+  text: string,
+): Promise<DocumentPage> {
+  return call(() =>
+    client(accessToken).PUT("/v1/documents/{document_id}/pages/{page_number}", {
+      params: { path: { document_id: documentId, page_number: pageNumber } },
+      body: { text },
+    }),
+  );
+}
+
+export function confirmDocument(accessToken: string, documentId: string): Promise<StudyDocument> {
+  return call(() =>
+    client(accessToken).POST("/v1/documents/{document_id}/confirm", {
+      params: { path: { document_id: documentId } },
+    }),
+  );
+}
+
+export function reprocessDocument(accessToken: string, documentId: string): Promise<StudyDocument> {
+  return call(() =>
+    client(accessToken).POST("/v1/documents/{document_id}/reprocess", {
+      params: { path: { document_id: documentId } },
+    }),
+  );
+}
+
+export function deleteDocument(accessToken: string, documentId: string): Promise<void> {
+  return callWithoutBody(() =>
+    client(accessToken).DELETE("/v1/documents/{document_id}", {
+      params: { path: { document_id: documentId } },
+    }),
+  );
+}
+
+export function searchDocuments(
+  accessToken: string,
+  goalId: string,
+  body: { query: string; document_ids?: string[] | null; limit?: number | null },
+): Promise<SearchResult> {
+  return call(() =>
+    client(accessToken).POST("/v1/goals/{goal_id}/documents/search", {
+      params: { path: { goal_id: goalId } },
+      body,
+    }),
+  );
+}
+
+/** The original file, as the API streams it (always an attachment). */
+export async function downloadDocument(accessToken: string, documentId: string): Promise<Response> {
+  const url = new URL(`/v1/documents/${documentId}/file`, getServerEnv().API_INTERNAL_BASE_URL);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ApiError(0, "API_UNREACHABLE", "The service is unreachable right now.");
+  }
+  if (!response.ok) throw toApiError(response, await response.json().catch(() => undefined));
+  return response;
+}

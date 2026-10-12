@@ -34,6 +34,14 @@ def _paragraph(text: str) -> DraftBlock:
     return DraftBlock(type="paragraph", text=text)
 
 
+def _snippet(text: str, limit: int = 200) -> str:
+    """The start of a passage, cut at a word, for the sample to show it was used."""
+    flat = " ".join(text.split())
+    if len(flat) <= limit:
+        return flat
+    return flat[:limit].rsplit(" ", 1)[0] + " ..."
+
+
 def sample_lesson(input_data: Mapping[str, Any]) -> DraftLesson:
     topic: Mapping[str, Any] = input_data["topic"]
     title = str(topic["title"]).strip()
@@ -49,6 +57,12 @@ def sample_lesson(input_data: Mapping[str, Any]) -> DraftLesson:
         intro += f" {_ADJUSTMENTS[adjust]}"
     if feedback:
         intro += f" The learner also wrote: {str(feedback)[:120]}"
+
+    if input_data.get("material_did_not_cover_topic"):
+        intro += (
+            " None of your uploaded material covered this topic, "
+            "so this sample uses general knowledge."
+        )
 
     sections = [
         DraftSection(
@@ -109,6 +123,26 @@ def sample_lesson(input_data: Mapping[str, Any]) -> DraftLesson:
             ],
         ),
     ]
+    if sources:
+        # A grounded sample: each retrieved passage is quoted briefly, so it is visible that the
+        # lesson was built from the learner's own material, and cited by its label.
+        sections.insert(
+            1,
+            DraftSection(
+                heading="What your material says",
+                blocks=[
+                    _paragraph(
+                        "A real lesson would build on the passages found in your own documents "
+                        "for this topic, explain them in plain words and cite each one. These "
+                        "are the passages that were found."
+                    ),
+                    *[
+                        _paragraph(f"From {source['title']}: {_snippet(str(source['text']))}")
+                        for source in sources[:3]
+                    ],
+                ],
+            ),
+        )
     if adjust == "deeper":
         sections.insert(
             3,
@@ -180,13 +214,12 @@ def sample_lesson(input_data: Mapping[str, Any]) -> DraftLesson:
         ),
         source_references=[
             DraftReference(
-                source_id=str(sources[0]["source_id"]),
-                chunk_id=str(sources[0]["chunk_id"]),
+                source_id=str(source["source_id"]),
+                chunk_id=str(source["chunk_id"]),
                 note="Used for the sample explanation",
             )
-        ]
-        if sources
-        else [],
+            for source in sources[:3]
+        ],
     )
 
 

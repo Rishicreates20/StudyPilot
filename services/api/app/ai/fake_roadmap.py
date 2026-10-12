@@ -13,6 +13,7 @@ from app.ai.fake import Reply
 from app.ai.provider import StructuredRequest
 from app.ai.roadmap.schema import (
     PlanEnrichment,
+    PlanEvidence,
     PlanModule,
     PlannedRoadmap,
     PlanObjective,
@@ -47,11 +48,26 @@ def sample_plan(input_data: Mapping[str, Any]) -> PlannedRoadmap:
         PlanObjective(id=f"o{n + 1}", text=f"Understand part {n + 1} of {title[:80]}")
         for n in range(objective_count)
     ]
+    # With uploaded material the sample follows the first sections of its contents list, so the
+    # whole path (contents -> plan -> evidence -> lessons) can be exercised without a model.
+    sections: list[tuple[str, Mapping[str, Any]]] = [
+        (str(document["source"]), entry)
+        for document in input_data.get("uploaded_material", [])
+        for entry in document["contents"]
+    ]
     topics = [
         PlanTopic(
             key=f"part-{n + 1}",
-            title=f"Part {n + 1}: {title[:60]}",
-            description=f"Sample topic {n + 1} for the goal. Replace it with a real plan later.",
+            title=(
+                f"Part {n + 1}: {sections[n][1]['title']}"[:120]
+                if n < len(sections)
+                else f"Part {n + 1}: {title[:60]}"
+            ),
+            description=(
+                f"Sample topic {n + 1}, from {sections[n][1]['where']} of the uploaded material."
+                if n < len(sections)
+                else f"Sample topic {n + 1} for the goal. Replace it with a real plan later."
+            ),
             objective_ids=[f"o{(n % objective_count) + 1}"],
             prerequisite_keys=[f"part-{n}"] if n else [],
             estimated_minutes=topic_minutes,
@@ -59,6 +75,10 @@ def sample_plan(input_data: Mapping[str, Any]) -> PlannedRoadmap:
             practice_task=f"Write three questions about part {n + 1} and answer them.",
         )
         for n in range(count)
+    ]
+    evidence = [
+        PlanEvidence(source_id=source, chunk_id=str(entry["id"]))
+        for source, entry in sections[:count]
     ]
     split = (count + 1) // 2 if count > 1 else count
     modules = [
@@ -103,12 +123,13 @@ def sample_plan(input_data: Mapping[str, Any]) -> PlannedRoadmap:
             f"{_SAMPLE_NOTE} It has {count} short topics, one per day, to show how a roadmap looks."
         ),
         target_outcome=f"Be able to explain the main ideas of {title[:100]}.",
-        syllabus_basis="learner_stated",
+        syllabus_basis="uploaded_document" if evidence else "learner_stated",
         assumptions=assumptions,
         unknowns=unknowns,
         objectives=objectives,
         modules=modules,
         revision_sessions=revisions,
+        evidence=evidence,
         enrichment=[
             PlanEnrichment(
                 key="explore-more",

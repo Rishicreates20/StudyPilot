@@ -25,6 +25,7 @@ from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.core.config import EX_CONFIG, Settings, load_settings_or_exit
 from app.core.db import Database
 from app.core.logging import configure_logging
+from app.documents.storage import build_document_files
 from app.jobs.runtime import WorkerEnv
 from app.jobs.worker import Worker
 
@@ -50,7 +51,11 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
                     hint="Set LLM_PROVIDER (and GEMINI_API_KEY) or roadmap jobs will fail.",
                 )
             env = WorkerEnv(
-                database=database, settings=settings, worker_id=_worker_id(), provider=provider
+                database=database,
+                settings=settings,
+                worker_id=_worker_id(),
+                provider=provider,
+                files=build_document_files(settings, client),
             )
             await Worker(env).run(stop)
     finally:

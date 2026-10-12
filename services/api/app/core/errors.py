@@ -28,6 +28,8 @@ _CODES_BY_STATUS: dict[int, str] = {
     404: "NOT_FOUND",
     405: "METHOD_NOT_ALLOWED",
     409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
+    415: "UNSUPPORTED_MEDIA_TYPE",
     422: "VALIDATION_ERROR",
     429: "RATE_LIMITED",
 }
@@ -92,6 +94,20 @@ class NotFoundError(AppError):
 class ConflictError(AppError):
     status_code = 409
     code = "CONFLICT"
+
+
+class PayloadTooLargeError(AppError):
+    """An upload bigger than the limit; refused before it is read in full."""
+
+    status_code = 413
+    code = "PAYLOAD_TOO_LARGE"
+
+
+class UnsupportedMediaError(AppError):
+    """A file whose real content is not a kind we accept."""
+
+    status_code = 415
+    code = "UNSUPPORTED_MEDIA_TYPE"
 
 
 class RateLimitedError(AppError):

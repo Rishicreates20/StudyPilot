@@ -76,3 +76,42 @@ alter default privileges for role postgres in schema public
   grant all on functions to anon, authenticated, service_role;
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
+
+-- Storage: only what the documents migration touches. On a real project the Storage service owns
+-- these tables, has row security on `objects`, and grants the API roles access that the policies
+-- then narrow; the stub mirrors that so the migration's bucket and policies run for real here.
+create schema storage;
+grant usage on schema storage to anon, authenticated, service_role;
+
+create table storage.buckets (
+  id text primary key,
+  name text not null unique,
+  public boolean not null default false,
+  file_size_limit bigint,
+  allowed_mime_types text[],
+  created_at timestamptz not null default now()
+);
+
+create table storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text,
+  owner_id text,
+  created_at timestamptz not null default now()
+);
+alter table storage.objects enable row level security;
+grant all on storage.buckets, storage.objects to anon, authenticated, service_role;
+
+-- The platform's own definition: the folders of an object's path, without its file name.
+create function storage.foldername(name text)
+returns text[]
+language plpgsql
+as $$
+declare
+  _parts text[];
+begin
+  select string_to_array(name, '/') into _parts;
+  return _parts[1:array_length(_parts, 1) - 1];
+end
+$$;
+grant execute on function storage.foldername(text) to anon, authenticated, service_role;

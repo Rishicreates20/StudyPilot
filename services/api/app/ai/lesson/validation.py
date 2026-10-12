@@ -42,6 +42,9 @@ _MIN_SIMPLE_CHARS = 80
 _URL_RE = re.compile(r"(?:https?://|ftp://|www\.)\S+", re.IGNORECASE)
 # A scholarly identifier in the prose is a claim about a real publication that nobody checked.
 _PUBLICATION_RE = re.compile(r"\b(?:doi:\s*10\.|doi\.org/|isbn[\s:-]*\d)", re.IGNORECASE)
+# A page reference in the prose. The model is never told a page number, so when the lesson rests on
+# the learner's material any page it names is invented (the app shows each passage's real position).
+_PAGE_CLAIM_RE = re.compile(r"\b(?:pages?\s*\d|pp?\.\s*\d)", re.IGNORECASE)
 _LANGUAGE_CHARS_RE = re.compile(r"[^a-z0-9+#._-]")
 
 
@@ -133,18 +136,15 @@ def _convert_block(block: DraftBlock, where: str, found: list[Violation]) -> dic
     """One block in the stored document's shape (a plain dict, validated with the whole lesson)."""
     if block.type == "paragraph":
         if not block.text.strip():
-            _add(found, "EMPTY_BLOCK", f"{where} has a paragraph with no text.")
-            return None
+            return None  # an empty block says nothing: dropped, not a reason for a second call
         return {"type": "paragraph", "text": block.text}
     if block.type == "list":
         items = [item.strip() for item in block.items if item.strip()]
         if not items:
-            _add(found, "EMPTY_BLOCK", f"{where} has a list with no items.")
             return None
         return {"type": "list", "ordered": block.ordered, "items": items}
     if block.type == "code":
         if not block.code.strip():
-            _add(found, "EMPTY_BLOCK", f"{where} has a code block with no code.")
             return None
         language = _LANGUAGE_CHARS_RE.sub("", block.language.lower())[:_MAX_LANGUAGE_CHARS]
         return {
@@ -154,7 +154,6 @@ def _convert_block(block: DraftBlock, where: str, found: list[Violation]) -> dic
             "caption": _or_none(block.caption, _MAX_CAPTION_CHARS),
         }
     if not block.text.strip():
-        _add(found, "EMPTY_BLOCK", f"{where} has a callout with no text.")
         return None
     return {
         "type": "callout",
@@ -310,7 +309,17 @@ def _check_prose(lesson: Lesson, context: LessonContext, found: list[Violation])
                 "checked and may not exist.",
             )
             break
-    if not context.evidence:
+    if context.evidence:
+        for where, text in prose_fragments(lesson):
+            if _PAGE_CLAIM_RE.search(text):
+                _add(
+                    found,
+                    "PAGE_CLAIM",
+                    f"Remove the page number from {where}. Do not name pages: the app shows "
+                    "where each cited passage came from.",
+                )
+                break
+    else:
         for where, text in prose_fragments(lesson):
             if _PUBLICATION_RE.search(text):
                 _add(

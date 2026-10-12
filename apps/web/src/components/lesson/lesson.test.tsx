@@ -41,6 +41,10 @@ import {
   study,
 } from "@/test-support/lessons";
 
+const DOC = "66666666-6666-4666-8666-666666666666";
+const CHUNK_A = "77777777-7777-4777-8777-777777777777";
+const CHUNK_B = "88888888-8888-4888-8888-888888888888";
+
 type ReaderProps = Partial<Parameters<typeof LessonReader>[0]>;
 
 function renderReader(props: ReaderProps = {}) {
@@ -197,23 +201,89 @@ describe("the lesson on screen", () => {
     expect(screen.queryByRole("heading", { name: "Sources" })).not.toBeInTheDocument();
   });
 
-  it("lists the passages of the learner's own material that a lesson cites", () => {
+  it("lists the passages of the learner's own material that a lesson cites, as they are now", () => {
     renderReader({
       lesson: lesson({
         content: lessonDocument({
+          grounding: "sources",
           source_references: [
-            { source_id: "notes-1", chunk_id: "p7", note: "Defines ownership" },
-            { source_id: "notes-1", chunk_id: "p9", note: null },
+            { source_id: DOC, chunk_id: CHUNK_A, note: "Defines ownership" },
+            { source_id: DOC, chunk_id: CHUNK_B, note: null },
           ],
         }),
+        citations: [
+          {
+            source_id: DOC,
+            chunk_id: CHUNK_A,
+            note: "Defines ownership",
+            available: true,
+            document_id: DOC,
+            document_title: "Rust notes",
+            position: "p. 3",
+            page_start: 3,
+            excerpt: "Each value has exactly one owner.",
+          },
+          {
+            source_id: DOC,
+            chunk_id: CHUNK_B,
+            note: null,
+            available: false,
+          },
+        ],
       }),
     });
 
     const sources = screen.getByRole("heading", { name: "Sources" }).closest("section");
     expect(sources).not.toBeNull();
-    expect(within(sources as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(sources as HTMLElement).getByText("Defines ownership")).toBeInTheDocument();
+    const scope = within(sources as HTMLElement);
+    expect(scope.getAllByRole("listitem")).toHaveLength(2);
+    expect(scope.getByText("Defines ownership")).toBeInTheDocument();
+    expect(scope.getByRole("link", { name: "Rust notes" })).toHaveAttribute(
+      "href",
+      `/goals/${GOAL}/documents/${DOC}`,
+    );
+    expect(scope.getByText("p. 3")).toBeInTheDocument();
+    expect(scope.getByText("Each value has exactly one owner.")).toBeInTheDocument();
+    expect(scope.getByText(/a document you have since deleted/i)).toBeInTheDocument();
     expect(screen.queryByText(/written from general knowledge/i)).not.toBeInTheDocument();
+  });
+
+  it("never renders a cited passage as markup", () => {
+    const hostile = '<img src=x onerror="alert(1)"> **bold**';
+    const { container } = renderReader({
+      lesson: lesson({
+        content: lessonDocument({
+          grounding: "sources",
+          source_references: [{ source_id: DOC, chunk_id: CHUNK_A, note: null }],
+        }),
+        citations: [
+          {
+            source_id: DOC,
+            chunk_id: CHUNK_A,
+            note: null,
+            available: true,
+            document_id: DOC,
+            document_title: "<script>alert(1)</script>",
+            position: "part 1",
+            page_start: 1,
+            excerpt: hostile,
+          },
+        ],
+      }),
+    });
+
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText(hostile)).toBeInTheDocument();
+  });
+
+  it("says plainly when the learner's documents did not cover the topic", () => {
+    renderReader({ lesson: lesson({ content: lessonDocument({ grounding: "no_match" }) }) });
+
+    expect(
+      screen.getByText(/nothing in it covered this topic closely enough/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sources" })).not.toBeInTheDocument();
   });
 
   it("labels a sample lesson, an earlier version and a requested change", () => {

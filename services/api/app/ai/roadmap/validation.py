@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from app.ai.roadmap.context import PlanningContext
+from app.ai.roadmap.material import highest_page
 from app.ai.roadmap.schema import MAX_TOPICS, PlannedRoadmap, PlanRevision, PlanTopic
 from app.ai.violations import Violation
 
@@ -20,6 +21,10 @@ _KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _MAX_REPORTED = 25
 _MAX_DAYS_LISTED = 6
 _EXAM_LIKE = frozenset({"exam", "certification"})
+# "page 7", "pages 3-9", "pp. 12": the start and the optional end of the range.
+_PAGE_REFERENCE_RE = re.compile(
+    r"\b(?:pages?|pp?\.)\s*(\d{1,5})(?:\s*(?:-|\u2013|\u2014|to)\s*(\d{1,5}))?", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -82,6 +87,7 @@ def validate_plan(plan: PlannedRoadmap, context: PlanningContext) -> list[Violat
     _check_horizon(plan, topics, context, found)
     _check_revision(plan.revision_sessions, topics, found)
     _check_evidence_and_unknowns(plan, context, found)
+    _check_pages(plan, context, found)
 
     return found[:_MAX_REPORTED]
 
@@ -275,6 +281,35 @@ def _check_revision(
             )
 
 
+def _check_pages(plan: PlannedRoadmap, context: PlanningContext, found: list[Violation]) -> None:
+    """A page the plan names must exist in the supplied material (it only saw the contents list)."""
+    if not context.material:
+        return
+    highest = highest_page(context.material)
+    fragments = [
+        plan.overview,
+        *(module.summary for module in plan.modules),
+        *(
+            text
+            for topic in plan.topics()
+            for text in (topic.title, topic.description, topic.practice_task)
+        ),
+        *(session.task for session in plan.revision_sessions),
+    ]
+    for text in fragments:
+        for match in _PAGE_REFERENCE_RE.finditer(text):
+            numbers = [int(n) for n in match.groups() if n is not None]
+            if any(n < 1 or n > highest for n in numbers):
+                _add(
+                    found,
+                    "PAGE_UNKNOWN",
+                    f"The plan names a page that is not in the uploaded material (it has pages "
+                    f"1 to {highest}). Use only the pages shown in its contents list, or name "
+                    "no pages.",
+                )
+                return
+
+
 def _check_evidence_and_unknowns(
     plan: PlannedRoadmap, context: PlanningContext, found: list[Violation]
 ) -> None:
@@ -287,6 +322,22 @@ def _check_evidence_and_unknowns(
                 "that are not in the supplied material.",
             )
             break
+    if context.material:
+        if not plan.evidence:
+            _add(
+                found,
+                "EVIDENCE_REQUIRED",
+                "The learner uploaded material, so the plan must be built from it. List the "
+                'sections it is based on under "evidence" (source_id and chunk_id, taken from '
+                "uploaded_material).",
+            )
+        if plan.syllabus_basis != "uploaded_document":
+            _add(
+                found,
+                "BASIS_UPLOADED",
+                "The plan is built from the learner's uploaded material, so syllabus_basis must "
+                'be "uploaded_document".',
+            )
     if plan.syllabus_basis == "uploaded_document" and not context.evidence_ids:
         _add(
             found,

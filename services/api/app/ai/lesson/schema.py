@@ -20,6 +20,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 # Bump when the stored document's shape changes; old lessons are read by their own version.
+# (``grounding`` was added with default "none", so lessons stored before it still read as v1.)
 CONTENT_VERSION = 1
 
 MIN_SECTIONS = 2
@@ -30,6 +31,11 @@ MAX_CODE_CHARS = 4000
 
 BlockType = Literal["paragraph", "list", "code", "callout"]
 CalloutKind = Literal["tip", "note", "warning"]
+# Whether a lesson rests on the learner's own uploaded material. Set by CODE, never by the model:
+# "none" = the goal has no ready documents (or the lesson predates documents); "sources" = it cites
+# passages that were really retrieved; "no_match" = the learner has documents but nothing in them
+# matched this topic (or the lesson cited none), so it relies on general knowledge and says so.
+Grounding = Literal["none", "sources", "no_match"]
 # How a regeneration is asked to differ from the version it starts from.
 Adjust = Literal["simpler", "more_examples", "deeper"]
 
@@ -290,7 +296,11 @@ class SimpleExplanation(_Stored):
 
 
 class SourceReference(_Stored):
-    """A pointer to a chunk of the learner's own uploaded material that supports the lesson."""
+    """A pointer to a passage of the learner's own uploaded material that supports the lesson.
+
+    In what the model writes these are short labels from the prompt ("S1" / "P2"); before a lesson
+    is stored, code replaces them with the real document and passage ids.
+    """
 
     source_id: str = Field(min_length=1, max_length=64)
     chunk_id: str = Field(min_length=1, max_length=64)
@@ -312,6 +322,7 @@ class Lesson(_Stored):
     summary: list[ShortText] = Field(min_length=2, max_length=8)
     simple_explanation: SimpleExplanation
     source_references: list[SourceReference] = Field(max_length=20)
+    grounding: Grounding = "none"
 
     def section_ids(self) -> list[str]:
         return [section.id for section in self.sections]

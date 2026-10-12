@@ -875,3 +875,200 @@ def test_the_real_roles_cannot_read_answer_keys_or_write_assessment_tables(
         "select has_table_privilege('authenticated', 'public.question_answer_keys', 'select') as ok"
     ).fetchone()
     assert keys is not None and keys["ok"] is False
+
+
+# --- Study documents: private files, pages, passages and vectors ----------------------------------
+
+DOCUMENT_TEXT = (
+    "Ownership is the rule that makes Rust memory safe. Each value has exactly one owner, and "
+    "the value is dropped when its owner goes out of scope."
+)
+
+
+@pytest.fixture
+def local_files(app: FastAPI, tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Uploaded files go to a temporary folder: the stack under test is Auth and the database."""
+    from app.documents.storage import LocalFiles
+
+    files = LocalFiles(tmp_path / "files")
+    monkeypatch.setattr(app.state, "files", files)
+    return files
+
+
+def add_document(
+    api: TestClient, account: Account, goal_id: str, files: Any, text: str = DOCUMENT_TEXT
+) -> dict[str, Any]:
+    """Upload ``text`` and let the real worker read and index it. Returns the finished document."""
+    clear_queue(DB_URL)
+    response = api.post(
+        f"/v1/goals/{goal_id}/documents",
+        headers={**account.headers, "Content-Type": "application/octet-stream"},
+        params={"name": "notes.txt", "title": "Rust notes"},
+        content=text.encode(),
+    )
+    assert response.status_code == 202, response.text
+    run_worker_once(DB_URL, files=files)
+    document: dict[str, Any] = {}
+    for _ in range(40):
+        document = api.get(f"/v1/documents/{response.json()['id']}", headers=account.headers).json()
+        if document["status"] in {"ready", "failed", "review"}:
+            break
+        time.sleep(0.5)
+    assert document["status"] == "ready", document
+    return document
+
+
+def test_pgvector_is_installed_and_documents_are_indexed_and_found_under_the_real_roles(
+    api: TestClient,
+    database: psycopg.Connection[DictRow],
+    sign_up: Callable[..., Account],
+    local_files: Any,
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    goal = create_goal(api, ada, "Learn Rust")
+
+    document = add_document(api, ada, goal["id"], local_files)
+
+    extension = database.execute(
+        "select e.extname, n.nspname from pg_extension e join pg_namespace n"
+        " on n.oid = e.extnamespace where e.extname = 'vector'"
+    ).fetchone()
+    assert extension is not None and extension["nspname"] == "extensions"
+    dims = database.execute(
+        "select distinct extensions.vector_dims(embedding) as dims from public.document_chunks"
+        " where document_id = %s",
+        (document["id"],),
+    ).fetchall()
+    assert [row["dims"] for row in dims] == [1536]
+    found = api.post(
+        f"/v1/goals/{goal['id']}/documents/search",
+        headers=ada.headers,
+        json={"query": "what does ownership mean in Rust"},
+    ).json()
+    assert found["enough_evidence"] is True
+    assert found["items"][0]["document_id"] == document["id"]
+
+    # Another learner can neither search Ada's goal nor see her documents.
+    searched = api.post(
+        f"/v1/goals/{goal['id']}/documents/search",
+        headers=grace.headers,
+        json={"query": "ownership"},
+    )
+    assert searched.status_code == 404
+    assert api.get(f"/v1/documents/{document['id']}", headers=grace.headers).status_code == 404
+    pages = api.get(f"/v1/documents/{document['id']}/pages", headers=grace.headers)
+    assert pages.status_code == 404
+
+
+def test_the_real_roles_see_only_their_own_documents_and_cannot_write_the_worker_tables(
+    api: TestClient,
+    database: psycopg.Connection[DictRow],
+    sign_up: Callable[..., Account],
+    local_files: Any,
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    goal = create_goal(api, ada, "Learn Rust")
+    document = add_document(api, ada, goal["id"], local_files)
+
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", grace.id)
+        for table in ("source_documents", "document_pages", "document_chunks"):
+            rows = database.execute(f"select 1 from public.{table}").fetchall()  # type: ignore[arg-type]  # noqa: S608
+            assert rows == [], table
+    with database.transaction(force_rollback=True):
+        _act_as(database, "authenticated", ada.id)
+        seen = database.execute("select id from public.source_documents").fetchall()
+        assert [str(row["id"]) for row in seen] == [document["id"]]
+
+    for statement in (
+        "update public.source_documents set status = 'ready'",
+        "update public.source_documents set sha256 = repeat('0', 64)",
+        "insert into public.document_pages (user_id, document_id, page_number, text, source)"
+        " select user_id, id, 99, 'x', 'text' from public.source_documents",
+        "update public.document_chunks set content = 'rewritten'",
+        "delete from public.document_chunks",
+        "insert into public.document_chunks (user_id, goal_id, document_id, chunk_index,"
+        " page_start, page_end, content, embedding, embedding_model)"
+        " select user_id, goal_id, id, 99, 1, 1, 'x',"
+        " array_fill(0, array[1536])::extensions.vector, 'm' from public.source_documents",
+    ):
+        with database.transaction(force_rollback=True):
+            _act_as(database, "authenticated", ada.id)
+            with pytest.raises(
+                (psycopg.errors.InsufficientPrivilege, psycopg.errors.CheckViolation)
+            ):
+                database.execute(statement)  # type: ignore[arg-type]
+
+    for table in ("source_documents", "document_pages", "document_chunks"):
+        for privilege in ("select", "insert", "update", "delete"):
+            allowed = database.execute(
+                "select has_table_privilege('anon', %s, %s) as ok", (f"public.{table}", privilege)
+            ).fetchone()
+            assert allowed is not None and allowed["ok"] is False, f"anon can {privilege} {table}"
+
+
+def _storage_ready() -> bool:
+    """Whether this stack runs Supabase Storage with the documents bucket (CI's does not)."""
+    keys = {"apikey": PUBLISHABLE_KEY, "Authorization": f"Bearer {PUBLISHABLE_KEY}"}
+    try:
+        response = httpx2.get(f"{STACK_URL}/storage/v1/bucket/documents", headers=keys, timeout=5.0)
+    except httpx2.HTTPError:
+        return False
+    return response.status_code in {200, 400, 401, 403}
+
+
+@pytest.mark.skipif(
+    not _storage_ready(),
+    reason="This stack has no Supabase Storage (CI starts it without storage-api).",
+)
+def test_private_storage_lets_a_learner_reach_only_their_own_files(
+    sign_up: Callable[..., Account],
+) -> None:
+    ada, grace = sign_up(), sign_up()
+    path = f"{ada.id}/{uuid.uuid4()}/notes.txt"
+    base = f"{STACK_URL}/storage/v1"
+
+    def keys(who: Account) -> dict[str, str]:
+        return {"apikey": PUBLISHABLE_KEY, **who.headers}
+
+    stored = httpx2.post(
+        f"{base}/object/documents/{path}",
+        headers={**keys(ada), "Content-Type": "text/plain"},
+        content=b"hello",
+        timeout=30,
+    )
+    assert stored.status_code == 200, stored.text
+
+    # The owner reads it; another learner and a signed-out visitor can neither read it nor write
+    # under the owner's prefix.
+    mine = httpx2.get(
+        f"{base}/object/authenticated/documents/{path}", headers=keys(ada), timeout=30
+    )
+    assert mine.content == b"hello"
+    forged = httpx2.post(
+        f"{base}/object/documents/{ada.id}/{uuid.uuid4()}/planted.txt",
+        headers={**keys(grace), "Content-Type": "text/plain"},
+        content=b"x",
+        timeout=30,
+    )
+    assert forged.status_code in {400, 401, 403, 404}
+    theirs = httpx2.get(
+        f"{base}/object/authenticated/documents/{path}", headers=keys(grace), timeout=30
+    )
+    assert theirs.status_code in {400, 401, 403, 404}
+    public = httpx2.get(f"{base}/object/public/documents/{path}", timeout=30)
+    assert public.status_code in {400, 401, 403, 404}
+
+    # A signed link reads exactly that object and nothing else.
+    signed = httpx2.post(
+        f"{base}/object/sign/documents/{path}",
+        headers=keys(ada),
+        json={"expiresIn": 60},
+        timeout=30,
+    )
+    assert signed.status_code == 200, signed.text
+    assert httpx2.get(f"{base}{signed.json()['signedURL']}", timeout=30).content == b"hello"
+
+    assert httpx2.delete(
+        f"{base}/object/documents/{path}", headers=keys(ada), timeout=30
+    ).is_success

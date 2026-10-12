@@ -195,6 +195,42 @@ function bearer(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
+/** A 1x1 PNG: any real picture would do, since the test provider "reads" whatever it is given. */
+const TINY_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+type RoadmapTopic = { id: string; title: string; description: string };
+
+/** A topic of the goal's current roadmap that has no lesson yet, found through the API. */
+async function topicWithoutLesson(
+  page: Page,
+  token: string,
+  goalId: string,
+): Promise<RoadmapTopic> {
+  const roadmaps = await page.request.get(`${API_URL}/v1/goals/${goalId}/roadmaps`, {
+    headers: bearer(token),
+  });
+  const currentId = (await roadmaps.json()).current_id as string;
+  const roadmap = await page.request.get(`${API_URL}/v1/roadmaps/${currentId}`, {
+    headers: bearer(token),
+  });
+  const modules = (await roadmap.json()).modules as {
+    topics: { id: string; title: string; description: string; study: { has_lesson: boolean } }[];
+  }[];
+  const topic = modules.flatMap((module) => module.topics).find((t) => !t.study.has_lesson);
+  expect(topic, "the roadmap should have a topic without a lesson").toBeTruthy();
+  return { id: topic!.id, title: topic!.title, description: topic!.description };
+}
+
+/** Study material that shares its words with the topic, so it is the passage a search finds. */
+function textAbout(topic: RoadmapTopic): string {
+  return (
+    `${topic.title}. ${topic.description}\n\n` +
+    "In this course the key rule is that every value has exactly one owner, " +
+    "and moving a value transfers that ownership."
+  );
+}
+
 test.describe("onboarding, goals and the dashboard", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -208,6 +244,10 @@ test.describe("onboarding, goals and the dashboard", () => {
   let attemptId = "";
   let practiceQuizId = "";
   let thirdAttemptUrl = "";
+  let documentTopic: RoadmapTopic = { id: "", title: "", description: "" };
+  let documentText = "";
+  let textDocumentId = "";
+  let imageDocumentId = "";
 
   test("signed-out visitors cannot reach protected pages or the API", async ({ page, request }) => {
     for (const path of ["/dashboard", "/onboarding", "/settings", "/goals/new"]) {
@@ -808,6 +848,222 @@ test.describe("onboarding, goals and the dashboard", () => {
     await expect(page.getByText("Not assessed yet").first()).toBeVisible();
   });
 
+  test("a text file is uploaded, read in the background and ready to use", async ({ page }) => {
+    await signIn(page, ada);
+    const token = await accessTokenOf(page.context());
+    const topic = await topicWithoutLesson(page, token, firstGoalId);
+    documentTopic = topic;
+    documentText = textAbout(topic);
+
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByRole("heading", { name: "Study material" })).toBeVisible();
+    await page.getByRole("link", { name: "Add study material" }).click();
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/documents$`));
+    await expect(page.getByText("No study material yet")).toBeVisible();
+
+    await page.getByLabel("File").setInputFiles({
+      name: "rust-notes.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from(documentText),
+    });
+    await page.getByLabel(/Title/).first().fill("Rust notes");
+    await page.getByRole("button", { name: "Upload" }).click();
+
+    // The worker reads and indexes it; the page follows along by itself.
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/documents/[0-9a-f-]{36}$`));
+    textDocumentId = page.url().split("/documents/")[1] ?? "";
+    await expect(page.getByRole("heading", { level: 1, name: "Rust notes" })).toBeVisible();
+    await expect(page.getByText("Ready to use", { exact: true })).toBeVisible({
+      timeout: 45_000,
+    });
+    await expect(page.getByRole("heading", { name: "Extracted text" })).toBeVisible();
+    await expect(page.getByText("every value has exactly one owner").first()).toBeVisible();
+  });
+
+  test("the original comes back as a download, and a reload keeps everything", async ({ page }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/documents/${textDocumentId}`);
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("link", { name: /Download original/ }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toBe("rust-notes.txt");
+    const stream = await file.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    expect(Buffer.concat(chunks).toString("utf8")).toBe(documentText);
+
+    await page.reload();
+    await expect(page.getByText("Ready to use", { exact: true })).toBeVisible();
+    await page.goto(`/goals/${firstGoalId}`);
+    await expect(page.getByText(/1 document, 1 ready to use/)).toBeVisible();
+  });
+
+  test("search finds the real passage and says so when nothing covers a question", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/documents`);
+
+    await page.getByLabel("Question or keywords").fill(documentTopic.title);
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByText("1 passage found in 1 document.")).toBeVisible();
+    const hit = page.getByRole("listitem").filter({ hasText: "exactly one owner" });
+    await expect(hit.getByRole("link", { name: "Rust notes" })).toBeVisible();
+    await expect(hit.getByText("part 1")).toBeVisible();
+
+    await page.getByLabel("Question or keywords").fill("How do I bake sourdough bread at home");
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByText(/Nothing in your documents covers that/)).toBeVisible();
+  });
+
+  test("a file that is not what it says it is, or cannot be used, is refused with a reason", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/documents`);
+    const upload = async (name: string, mimeType: string, buffer: Buffer) => {
+      await page.getByLabel("File").setInputFiles({ name, mimeType, buffer });
+      await page.getByRole("button", { name: "Upload" }).click();
+    };
+
+    // Text pretending to be a PDF.
+    await upload("fake.pdf", "application/pdf", Buffer.from("Just some words, not a PDF at all."));
+    await expect(
+      page.getByText(/file name ends in \.pdf but its content is plain text/i),
+    ).toBeVisible();
+
+    // A program pretending to be notes.
+    await upload(
+      "notes.txt",
+      "text/plain",
+      Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, ...Array(200).fill(0)]),
+    );
+    await expect(page.getByText(/This kind of file can't be used/)).toBeVisible();
+
+    // Nothing was stored for either.
+    await expect(page.getByRole("link", { name: "fake", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "notes", exact: true })).toHaveCount(0);
+  });
+
+  test("a picture of notes is read, waits for the learner's check, and is used once confirmed", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/documents`);
+
+    await page.getByLabel("File").setInputFiles({
+      name: "handwriting.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(TINY_PNG, "base64"),
+    });
+    await page.getByLabel(/Title/).first().fill("Handwritten page");
+    await page.getByRole("button", { name: "Upload" }).click();
+    await expect(page).toHaveURL(new RegExp(`/goals/${firstGoalId}/documents/[0-9a-f-]{36}$`));
+    imageDocumentId = page.url().split("/documents/")[1] ?? "";
+
+    // The reading was uncertain, so nothing is used until the learner has looked at it.
+    await expect(
+      page.getByText("Check what was read before it is used", { exact: true }),
+    ).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText("Read from a picture", { exact: true })).toBeVisible();
+    await expect(page.getByText("Partly unclear", { exact: true })).toBeVisible();
+    const text = page.getByLabel("Text of page 1");
+    await expect(text).toHaveValue(/Sample text from the built-in test provider/);
+
+    await page.goto(`/goals/${firstGoalId}/documents`);
+    await page.getByLabel("Question or keywords").fill("how long does a reference stay valid");
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByText(/Nothing in your documents covers that/)).toBeVisible();
+
+    // Correct it, save, and use it.
+    await page.goto(`/goals/${firstGoalId}/documents/${imageDocumentId}`);
+    await page
+      .getByLabel("Text of page 1")
+      .fill(
+        "Lifetimes describe how long a reference stays valid, so the compiler can reject dangling pointers.",
+      );
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Corrected by you")).toBeVisible();
+    await page.getByRole("button", { name: "Use this text" }).click();
+    await expect(page.getByText("Ready to use", { exact: true })).toBeVisible({
+      timeout: 45_000,
+    });
+
+    await page.goto(`/goals/${firstGoalId}/documents`);
+    await page.getByLabel("Question or keywords").fill("how long does a reference stay valid");
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(
+      page.getByText(/Lifetimes describe how long a reference stays valid/),
+    ).toBeVisible();
+  });
+
+  test("a lesson written for a topic is grounded in the uploaded passage and cites it", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/learn/${documentTopic.id}`);
+    await expect(page.getByText("This topic doesn't have a lesson yet")).toBeVisible();
+
+    await page.getByRole("button", { name: "Write this lesson" }).click();
+    await expect(page.getByRole("button", { name: "Explain simply" })).toBeVisible({
+      timeout: 45_000,
+    });
+
+    const sources = page
+      .getByRole("heading", { name: "Sources" })
+      .locator("xpath=ancestor::section");
+    await expect(sources).toBeVisible();
+    await expect(sources.getByRole("link", { name: "Rust notes" })).toBeVisible();
+    await expect(sources.getByText("part 1").first()).toBeVisible();
+    await expect(sources.getByText(/every value has exactly one owner/).first()).toBeVisible();
+    await expect(page.getByText(/written from general knowledge/)).toHaveCount(0);
+    // The lesson itself rests on the passage (the test provider quotes what it was given).
+    await expect(page.getByText(/From Rust notes/).first()).toBeVisible();
+
+    await sources.getByRole("link", { name: "Rust notes" }).click();
+    await expect(page).toHaveURL(new RegExp(`/documents/${textDocumentId}$`));
+  });
+
+  test("deleting a document removes it and its passages, and the lesson shows the citation as gone", async ({
+    page,
+  }) => {
+    await signIn(page, ada);
+    await page.goto(`/goals/${firstGoalId}/documents/${textDocumentId}`);
+
+    await page.getByRole("button", { name: "Delete" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText(/removed for good/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete forever" }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/goals/${firstGoalId}/documents\\?notice=document-deleted$`),
+    );
+    await expect(page.getByText("Document deleted", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Rust notes" })).toHaveCount(0);
+
+    // Its address is gone too, for the owner as for anyone.
+    await page.goto(`/goals/${firstGoalId}/documents/${textDocumentId}`);
+    await expect(page.getByText("We couldn't find that")).toBeVisible();
+
+    // The search no longer returns it.
+    await page.goto(`/goals/${firstGoalId}/documents`);
+    await page.getByLabel("Question or keywords").fill(documentTopic.title);
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(
+      page.getByText(/passages? found in|Nothing in your documents covers that/),
+    ).toBeVisible();
+    await expect(page.getByText("Rust notes")).toHaveCount(0);
+
+    // The lesson keeps its wording but not a copy of the document.
+    await page.goto(`/goals/${firstGoalId}/learn/${documentTopic.id}`);
+    const sources = page
+      .getByRole("heading", { name: "Sources" })
+      .locator("xpath=ancestor::section");
+    await expect(sources.getByText("A document you have since deleted")).toBeVisible();
+    await expect(sources.getByText(/every value has exactly one owner/)).toHaveCount(0);
+  });
+
   test("a goal can be paused, resumed, completed and reopened", async ({ page }) => {
     await signIn(page, ada);
     await page.goto(`/goals/${firstGoalId}`);
@@ -979,6 +1235,7 @@ test.describe("onboarding, goals and the dashboard", () => {
     let adasJobId = "";
     let adasItemId = "";
     let adasLessonId = "";
+    let adasDocumentId = "";
 
     test("sees none of Ada's goals and starts from a clean slate", async ({ browser, page }) => {
       await signIn(page, ada);
@@ -1009,6 +1266,18 @@ test.describe("onboarding, goals and the dashboard", () => {
       });
       adasLessonId = (await study.json()).lesson.id;
       expect(adasLessonId).toBeTruthy();
+
+      // And a document, uploaded through the API (what a document is does not depend on a browser).
+      const upload = await page.request.post(
+        `${API_URL}/v1/goals/${adasGoalId}/documents?name=ada-notes.txt&title=Ada%20notes`,
+        {
+          headers: { ...bearer(adasToken), "Content-Type": "application/octet-stream" },
+          data: Buffer.from("Ada keeps her private study notes about ownership and borrowing."),
+        },
+      );
+      expect(upload.status()).toBe(202);
+      adasDocumentId = (await upload.json()).id;
+      expect(adasDocumentId).toBeTruthy();
 
       const other = await freshContext(browser);
       try {
@@ -1159,6 +1428,65 @@ test.describe("onboarding, goals and the dashboard", () => {
         await expect(other.page.getByText("We couldn't find that")).toBeVisible();
         await other.page.goto(`/goals/${firstGoalId}/learn/${lessonItemId}/results/${attemptId}`);
         await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+      } finally {
+        await other.context.close();
+      }
+    });
+
+    test("cannot read, search, change, download or delete Ada's documents even with a real token", async ({
+      browser,
+      request,
+    }) => {
+      const other = await freshContext(browser);
+      try {
+        await signIn(other.page, grace);
+        const token = await accessTokenOf(other.context);
+        const document = `${API_URL}/v1/documents/${adasDocumentId}`;
+
+        const attempts = [
+          await request.get(`${API_URL}/v1/goals/${adasGoalId}/documents`, {
+            headers: bearer(token),
+          }),
+          await request.post(`${API_URL}/v1/goals/${adasGoalId}/documents/search`, {
+            headers: bearer(token),
+            data: { query: "borrowing a value without ownership" },
+          }),
+          await request.post(`${API_URL}/v1/goals/${adasGoalId}/documents/paste`, {
+            headers: bearer(token),
+            data: { title: "Planted", text: "Planted text" },
+          }),
+          await request.post(`${API_URL}/v1/goals/${adasGoalId}/documents?name=planted.txt`, {
+            headers: { ...bearer(token), "Content-Type": "application/octet-stream" },
+            data: Buffer.from("Planted text"),
+          }),
+          await request.get(document, { headers: bearer(token) }),
+          await request.get(`${document}/pages`, { headers: bearer(token) }),
+          await request.get(`${document}/file`, { headers: bearer(token) }),
+          await request.patch(document, { headers: bearer(token), data: { title: "Hijacked" } }),
+          await request.put(`${document}/pages/1`, {
+            headers: bearer(token),
+            data: { text: "Hijacked" },
+          }),
+          await request.post(`${document}/confirm`, { headers: bearer(token) }),
+          await request.post(`${document}/reprocess`, { headers: bearer(token) }),
+          await request.delete(document, { headers: bearer(token) }),
+        ];
+        expect(attempts.map((response) => response.status())).toEqual(
+          Array.from({ length: attempts.length }, () => 404),
+        );
+
+        // Her pages look exactly like pages that don't exist.
+        for (const path of [
+          `/goals/${adasGoalId}/documents`,
+          `/goals/${adasGoalId}/documents/${adasDocumentId}`,
+        ]) {
+          await other.page.goto(path);
+          await expect(other.page.getByText("We couldn't find that")).toBeVisible();
+        }
+        const download = await other.page.request.get(
+          `/goals/${adasGoalId}/documents/${adasDocumentId}/file`,
+        );
+        expect(download.status()).toBe(404);
       } finally {
         await other.context.close();
       }

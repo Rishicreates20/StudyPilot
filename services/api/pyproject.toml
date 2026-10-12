@@ -17,6 +17,8 @@ dependencies = [
     # The IANA timezone database, used to validate timezone names. Slim Linux images ship none, and
     # Windows has none either, so it is a real dependency rather than an assumption about the OS.
     "tzdata==2026.5",
+    # PDF text extraction: pure Python, BSD licence (PyMuPDF is AGPL and is avoided, ADR-014).
+    "pypdf==6.20.0",
 ]
 
 [dependency-groups]

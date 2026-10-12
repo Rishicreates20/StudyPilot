@@ -2,8 +2,11 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.ai.provider import LLMProvider
 from app.core.db import Database
 from app.core.errors import ServiceUnavailableError
+from app.core.rate_limit import SlidingWindowLimiter
+from app.documents.storage import DocumentFiles
 
 
 def get_database(request: Request) -> Database:
@@ -16,3 +19,22 @@ def get_database(request: Request) -> Database:
 
 
 DatabaseDep = Annotated[Database, Depends(get_database)]
+
+
+def get_files(request: Request) -> DocumentFiles | None:
+    """The configured file store, or None when storage isn't set up (uploads are then refused)."""
+    return request.app.state.files
+
+
+def get_provider(request: Request) -> LLMProvider | None:
+    """The model provider the API uses for one thing only: embedding a search question."""
+    return request.app.state.provider
+
+
+def get_search_limiter(request: Request) -> SlidingWindowLimiter:
+    return request.app.state.search_limiter
+
+
+FilesDep = Annotated[DocumentFiles | None, Depends(get_files)]
+ProviderDep = Annotated[LLMProvider | None, Depends(get_provider)]
+SearchLimiterDep = Annotated[SlidingWindowLimiter, Depends(get_search_limiter)]

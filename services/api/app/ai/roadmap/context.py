@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from app.ai.roadmap.material import MaterialDocument, evidence_labels
 from app.schemas.goals import Goal
 
 MIN_TITLE_CHARS = 3
@@ -44,9 +45,11 @@ class PlanningContext:
     target_date: date | None
     # The last study day the plan may use (day 1 is today).
     max_days: int
-    # (source_id, chunk_id) pairs of the learner's own material the plan may cite. Empty until
-    # document upload exists.
+    # (source label, section label) pairs of the learner's own material the plan may cite: the
+    # labels of ``material``, which the worker swaps for real ids before storing.
     evidence_ids: frozenset[tuple[str, str]] = frozenset()
+    # The goal's ready documents as contents lists (empty when there are none).
+    material: tuple[MaterialDocument, ...] = ()
     feedback: str | None = None
     previous_outline: tuple[OutlineModule, ...] | None = None
     target_date_passed: bool = False
@@ -54,6 +57,12 @@ class PlanningContext:
 
     def input_data(self) -> dict[str, Any]:
         """The facts as plain data: rendered into the prompt, and used by the test double."""
+        data = self._facts()
+        if self.material:
+            data["uploaded_material"] = [document.as_data() for document in self.material]
+        return data
+
+    def _facts(self) -> dict[str, Any]:
         return {
             "goal": {
                 "title": self.goal_title,
@@ -116,6 +125,7 @@ def build_context(
     *,
     today: date,
     evidence_ids: frozenset[tuple[str, str]] = frozenset(),
+    material: Sequence[MaterialDocument] = (),
     feedback: str | None = None,
     previous_outline: Sequence[OutlineModule] | None = None,
 ) -> PlanningContext:
@@ -131,7 +141,8 @@ def build_context(
         today=today,
         target_date=goal.target_date if days is not None else None,
         max_days=min(days, DEFAULT_HORIZON_DAYS) if days is not None else DEFAULT_HORIZON_DAYS,
-        evidence_ids=evidence_ids,
+        evidence_ids=evidence_ids | evidence_labels(material),
+        material=tuple(material),
         feedback=feedback,
         previous_outline=(
             tuple(previous_outline)[:_MAX_OUTLINE_MODULES] if previous_outline else None

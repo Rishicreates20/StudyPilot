@@ -507,7 +507,7 @@ def test_a_written_lesson_is_returned_as_a_typed_document(
     assert lesson["id"] == owned["lesson"] and lesson["status"] == "current"
     assert lesson["version"] == 1 and lesson["content_version"] == 1
     assert lesson["is_synthetic"] is True and lesson["provider"] == "fake"
-    assert lesson["prompt_version"] == "lesson-writer/v1"
+    assert lesson["prompt_version"] == "lesson-writer/v2"
     content = lesson["content"]
     assert content["title"] == lesson["title"] and content["language"] == "en"
     assert [s["id"] for s in content["sections"]] == [

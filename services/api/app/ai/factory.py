@@ -2,7 +2,7 @@
 
 import httpx2
 
-from app.ai.fake import FakeProvider, Reply
+from app.ai.fake import FakeProvider, Reply, sample_ocr
 from app.ai.fake_lesson import lesson_responder
 from app.ai.fake_quiz import grading_responder, quiz_responder
 from app.ai.fake_roadmap import roadmap_responder
@@ -35,7 +35,10 @@ def build_provider(settings: Settings, client: httpx2.AsyncClient) -> LLMProvide
             max_output_tokens=settings.llm_max_output_tokens,
             temperature=settings.llm_temperature,
             timeout_seconds=settings.llm_timeout_seconds,
+            embedding_model=settings.embedding_model,
+            fallback_models=settings.gemini_models[1:],
+            thinking_level=settings.gemini_thinking_level or None,
         )
     if settings.llm_provider is LlmProviderName.FAKE:
-        return FakeProvider(builtin_responder)
+        return FakeProvider(builtin_responder, ocr=sample_ocr)
     raise LLMNotConfigured("LLM_PROVIDER is not set")

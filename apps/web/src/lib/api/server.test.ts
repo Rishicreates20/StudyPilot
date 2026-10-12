@@ -6,13 +6,16 @@ import {
   completeOnboarding,
   createGoal,
   deleteGoal,
+  downloadDocument,
   fetchGoal,
   fetchGoalSummary,
   fetchGoals,
   fetchMe,
+  searchDocuments,
   setGoalStatus,
   updateGoal,
   updateMe,
+  uploadDocument,
 } from "@/lib/api/server";
 
 function problem(status: number, body: Record<string, unknown>) {
@@ -300,5 +303,96 @@ describe("field errors", () => {
       learning_preferences: "Not one of the choices",
       preferred_languages: "Choose from: en, hi, or.",
     });
+  });
+});
+
+describe("document calls", () => {
+  const DOC_ID = "99999999-9999-4999-8999-999999999999";
+
+  it("uploads the raw file as the body, with its name in the query and the token in a header", async () => {
+    const fetchMock = vi.fn<(input: URL | string, init?: RequestInit) => Promise<Response>>(
+      async () => json({ id: DOC_ID }, 202),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["Ownership means one owner."], "notes.txt", { type: "text/plain" });
+
+    const created = await uploadDocument("access-token-123", GOAL_ID, file, "Chapter 1");
+
+    expect(created).toEqual({ id: DOC_ID });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const target = new URL(String(url));
+    expect(target.pathname).toBe(`/v1/goals/${GOAL_ID}/documents`);
+    expect(target.searchParams.get("name")).toBe("notes.txt");
+    expect(target.searchParams.get("title")).toBe("Chapter 1");
+    expect(target.search).not.toContain("access-token");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(file);
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer access-token-123",
+      "Content-Type": "application/octet-stream",
+    });
+  });
+
+  it("turns a refused upload into an error with the API's reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        problem(413, { code: "FILE_TOO_LARGE", detail: "That file is larger than 10 MB." }),
+      ),
+    );
+
+    const error = (await uploadDocument("t", GOAL_ID, new File(["x"], "a.txt"), null).catch(
+      (e: unknown) => e,
+    )) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect([error.status, error.code, error.message]).toEqual([
+      413,
+      "FILE_TOO_LARGE",
+      "That file is larger than 10 MB.",
+    ]);
+  });
+
+  it("reports an unreachable service instead of throwing a network error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+
+    await expect(
+      uploadDocument("t", GOAL_ID, new File(["x"], "a.txt"), null),
+    ).rejects.toMatchObject({
+      status: 0,
+      code: "API_UNREACHABLE",
+    });
+  });
+
+  it("searches with a body that names no owner", async () => {
+    const fetchMock = stubFetch(() =>
+      json({ items: [], enough_evidence: false, searched_documents: 0 }),
+    );
+
+    await searchDocuments("t", GOAL_ID, { query: "ownership" });
+
+    const request = fetchMock.mock.calls[0]?.[0] as Request;
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe(`/v1/goals/${GOAL_ID}/documents/search`);
+    expect(await request.json()).toEqual({ query: "ownership" });
+  });
+
+  it("asks for a document's file through the API, never a storage link", async () => {
+    const fetchMock = vi.fn<(input: URL | string, init?: RequestInit) => Promise<Response>>(
+      async () => new Response("bytes", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await downloadDocument("access-token-123", DOC_ID);
+
+    expect(await response.text()).toBe("bytes");
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).pathname).toBe(
+      `/v1/documents/${DOC_ID}/file`,
+    );
   });
 });

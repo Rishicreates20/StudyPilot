@@ -11,26 +11,35 @@ import httpx2
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.factory import build_provider
+from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.api import health
 from app.api import v1 as api_v1
 from app.core.config import Settings, load_settings_or_exit
 from app.core.db import Database
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.rate_limit import SlidingWindowLimiter
 from app.core.request_context import REQUEST_ID_HEADER, RequestContextMiddleware
 from app.core.security import HttpJwksFetcher, JwksFetcher, TokenVerifier
+from app.documents.storage import DocumentFiles, build_document_files
 
 _JWKS_HTTP_TIMEOUT_SECONDS = 3.0
 
 
 def create_app(
-    settings: Settings | None = None, *, jwks_fetcher: JwksFetcher | None = None
+    settings: Settings | None = None,
+    *,
+    jwks_fetcher: JwksFetcher | None = None,
+    files: DocumentFiles | None = None,
+    provider: LLMProvider | None = None,
 ) -> FastAPI:
     """Build the application.
 
     ``jwks_fetcher`` replaces the HTTP fetch of the project's signing keys. Tests use it to serve
     the public half of a locally generated key pair; tokens are still verified with real
-    cryptography exactly as in production.
+    cryptography exactly as in production. ``files`` and ``provider`` replace the configured file
+    store and model provider (tests pass a temporary folder and a scripted provider).
     """
     settings = settings or load_settings_or_exit()
     configure_logging(settings.log_level, json_logs=settings.json_logs)
@@ -44,6 +53,19 @@ def create_app(
                 stack.push_async_callback(client.aclose)
                 fetcher = HttpJwksFetcher(client, settings.jwks_url)
             app.state.token_verifier = TokenVerifier.from_settings(settings, fetcher=fetcher)
+
+            # One client for file storage and for embedding a search question. The API never
+            # generates content: lessons, plans and quizzes are the worker's job.
+            http = httpx2.AsyncClient()
+            stack.push_async_callback(http.aclose)
+            app.state.files = files if files is not None else build_document_files(settings, http)
+            if provider is not None:
+                app.state.provider = provider
+            else:
+                try:
+                    app.state.provider = build_provider(settings, http)
+                except LLMNotConfigured:
+                    app.state.provider = None
 
             if settings.database_url is not None:
                 database = Database.from_settings(settings)
@@ -65,6 +87,11 @@ def create_app(
     app.state.readiness_checks = {}
     app.state.database = None
     app.state.token_verifier = None
+    app.state.files = None
+    app.state.provider = None
+    app.state.search_limiter = SlidingWindowLimiter(
+        settings.document_searches_per_user_per_hour, 3600.0
+    )
 
     # Added first = inner. Bearer tokens (not cookies) authenticate the API, so credentials
     # are not allowed cross-origin.

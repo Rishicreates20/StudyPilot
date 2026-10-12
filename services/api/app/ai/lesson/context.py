@@ -4,12 +4,33 @@ Built once per job and used twice: rendered into the prompt, and handed to the v
 rules the lesson is checked against are the same facts the model was given.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
 from app.ai.lesson.schema import Adjust, Lesson
 from app.schemas.goals import Goal
+
+_PAGE_RANGE = r"\d{1,5}(?:\s*(?:-|\u2013|\u2014|to)\s*\d{1,5})?"
+_PAGE_LIST = rf"\b(?:pages?|pp?\.)\s*{_PAGE_RANGE}(?:\s*(?:,|and|&)\s*{_PAGE_RANGE})*"
+# "(Pages 42-48, 58-65)" at the end of a topic title: the whole bracket goes.
+_BRACKETED_PAGES_RE = re.compile(rf"\s*[(\[][^()\[\]]*?{_PAGE_LIST}[^()\[\]]*?[)\]]", re.IGNORECASE)
+_PAGES_RE = re.compile(_PAGE_LIST, re.IGNORECASE)
+
+
+def without_page_references(text: str) -> str:
+    """``text`` with page numbers taken out: "Keys (Pages 3-9)" -> "Keys".
+
+    A plan built from a learner's document names the pages a topic covers, and that is useful on the
+    roadmap. The lesson writer is never given page numbers (the app shows where each cited passage
+    came from), and a lesson that repeats one from its topic's title would be rejected and cost a
+    repair call. So the writer, and the search for the topic's passages, see the topic without them.
+    """
+    text = _BRACKETED_PAGES_RE.sub("", text)
+    text = _PAGES_RE.sub("the relevant pages", text)
+    return " ".join(text.split())
+
 
 # Roughly how many words of lesson text suit a topic: enough to teach it, not a chapter. Reading and
 # understanding take time, and the rest of the topic's minutes go to the practice task.
@@ -27,12 +48,22 @@ _MAX_NEXT = 3
 
 @dataclass(frozen=True)
 class EvidenceChunk:
-    """A passage of the learner's own uploaded material the lesson may rely on and cite."""
+    """A passage of the learner's own uploaded material the lesson may rely on and cite.
+
+    ``source_id`` and ``chunk_id`` are short labels ("S1", "P2") that the model sees and cites: a
+    model copies a two-character label reliably and a 36-character identifier unreliably. The real
+    document and passage ids stay on the software side, and ``ground_lesson`` swaps them in before
+    anything is stored, so a stored citation always points at a passage that was really retrieved.
+    """
 
     source_id: str
     chunk_id: str
     title: str
     text: str
+    # The real identifiers and position of the retrieved passage (never shown to the model).
+    document_id: str = ""
+    real_chunk_id: str = ""
+    position: str = ""
 
 
 @dataclass(frozen=True)
@@ -79,8 +110,10 @@ class LessonContext:
     # Titles of the next few topics, so the lesson does not teach what they will.
     coming_next: tuple[str, ...]
     syllabus_basis: str
-    # Passages of the learner's own material that may be cited. Empty until documents exist.
+    # Passages of the learner's own material that may be cited: the ones retrieved for this topic.
     evidence: tuple[EvidenceChunk, ...] = ()
+    # Whether the learner has any ready documents for the goal (even if none matched this topic).
+    has_documents: bool = False
     adjust: Adjust | None = None
     feedback: str | None = None
     # The lesson being changed, when ``adjust`` or ``feedback`` asks for a different version.
@@ -129,6 +162,9 @@ class LessonContext:
                 for chunk in self.evidence
             ],
             "has_source_material": bool(self.evidence),
+            # True when the learner uploaded material but nothing in it matched this topic: the
+            # lesson then relies on general knowledge and must not pretend otherwise.
+            "material_did_not_cover_topic": self.has_documents and not self.evidence,
             "change_request": (
                 {"adjust": self.adjust, "feedback": self.feedback}
                 if self.adjust or self.feedback
@@ -148,6 +184,7 @@ def build_context(
     feedback: str | None = None,
     previous_lesson: Lesson | None = None,
     evidence: tuple[EvidenceChunk, ...] = (),
+    has_documents: bool = False,
 ) -> LessonContext:
     return LessonContext(
         goal_title=goal.title,
@@ -155,17 +192,22 @@ def build_context(
         level=goal.current_level,
         language=facts.language,
         learning_preferences=tuple(goal.learning_preferences),
-        topic_title=facts.title,
-        topic_description=facts.description,
-        practice_task=facts.practice_task,
+        topic_title=without_page_references(facts.title),
+        topic_description=without_page_references(facts.description),
+        practice_task=(
+            without_page_references(facts.practice_task) if facts.practice_task else None
+        ),
         estimated_minutes=facts.estimated_minutes,
-        module_title=facts.module_title,
-        module_summary=facts.module_summary,
-        objectives=facts.objectives,
-        already_covered=facts.earlier_titles,
-        coming_next=facts.later_titles,
+        module_title=without_page_references(facts.module_title) if facts.module_title else None,
+        module_summary=(
+            without_page_references(facts.module_summary) if facts.module_summary else None
+        ),
+        objectives=tuple(without_page_references(text) for text in facts.objectives),
+        already_covered=tuple(without_page_references(t) for t in facts.earlier_titles),
+        coming_next=tuple(without_page_references(t) for t in facts.later_titles),
         syllabus_basis=facts.syllabus_basis,
         evidence=evidence,
+        has_documents=has_documents or bool(evidence),
         adjust=adjust,
         feedback=feedback,
         previous_lesson=previous_lesson,

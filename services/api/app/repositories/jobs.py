@@ -15,7 +15,8 @@ from app.core.db import UserConnection
 from app.schemas.jobs import GenerationJob, JobType
 
 _SELECT = """
-    select j.id, j.goal_id, j.item_id, j.attempt_id, j.job_type, j.status, j.stage, j.progress,
+    select j.id, j.goal_id, j.item_id, j.attempt_id, j.document_id, j.job_type, j.status,
+           j.stage, j.progress,
            j.attempts, j.max_attempts, j.cancel_requested, j.error_code, j.error_message,
            r.id as roadmap_id, l.id as lesson_id, z.id as quiz_id, j.created_at, j.started_at,
            j.finished_at
@@ -35,12 +36,13 @@ async def insert(
     request: dict[str, Any],
     job_type: JobType = "roadmap",
     item_id: UUID | None = None,
+    document_id: UUID | None = None,
 ) -> GenerationJob:
     cursor = await connection.execute(
         "insert into public.generation_jobs"
-        " (user_id, goal_id, item_id, job_type, idempotency_key, request)"
-        " values (%s, %s, %s, %s, %s, %s) returning id",
-        (user_id, goal_id, item_id, job_type, idempotency_key, Jsonb(request)),
+        " (user_id, goal_id, item_id, document_id, job_type, idempotency_key, request)"
+        " values (%s, %s, %s, %s, %s, %s, %s) returning id",
+        (user_id, goal_id, item_id, document_id, job_type, idempotency_key, Jsonb(request)),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -120,6 +122,39 @@ async def latest_for_item(
     )
     row = await cursor.fetchone()
     return GenerationJob.model_validate(row) if row else None
+
+
+async def latest_for_document(
+    connection: UserConnection, user_id: UUID, document_id: UUID
+) -> GenerationJob | None:
+    """The newest processing job of a document, whatever its state."""
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.document_id = %s"
+        " order by j.created_at desc, j.id desc limit 1",
+        (user_id, document_id),
+    )
+    row = await cursor.fetchone()
+    return GenerationJob.model_validate(row) if row else None
+
+
+async def latest_per_document(
+    connection: UserConnection, user_id: UUID, goal_id: UUID
+) -> dict[UUID, GenerationJob]:
+    """The newest processing job of every document of a goal, by document id."""
+    cursor = await connection.execute(
+        "select distinct on (document_id) id from public.generation_jobs"
+        " where user_id = %s and goal_id = %s and document_id is not null"
+        " order by document_id, created_at desc, id desc",
+        (user_id, goal_id),
+    )
+    ids = [row["id"] for row in await cursor.fetchall()]
+    if not ids:
+        return {}
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.id = any(%s)", (user_id, ids)
+    )
+    jobs = [GenerationJob.model_validate(row) for row in await cursor.fetchall()]
+    return {job.document_id: job for job in jobs if job.document_id is not None}
 
 
 async def latest_for_attempt(

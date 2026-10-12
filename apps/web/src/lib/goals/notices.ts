@@ -160,6 +160,41 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Marking didn't work after several tries",
     message: "Compare your answer with the model answer and mark it yourself instead.",
   },
+  "document-deleted": {
+    variant: "info",
+    title: "Document deleted",
+    message: "Its file, its text and its indexed passages were removed.",
+  },
+  "document-cancelled": {
+    variant: "info",
+    title: "Processing stopped",
+    message: "Nothing was indexed. You can process the document again whenever you like.",
+  },
+  "document-busy": {
+    variant: "warning",
+    title: "This document is being processed",
+    message: "Wait for it to finish, or stop the job first.",
+  },
+  "nothing-to-confirm": {
+    variant: "info",
+    title: "There is no text waiting to be used",
+    message: "Process the document again to read it from the start.",
+  },
+  "document-limit-today": {
+    variant: "warning",
+    title: "Daily document limit reached",
+    message: "You have used today's document processing. Please try again tomorrow.",
+  },
+  "storage-unavailable": {
+    variant: "warning",
+    title: "File storage isn't available",
+    message: "Nothing was changed. Please try again in a moment.",
+  },
+  "documents-ai-unavailable": {
+    variant: "warning",
+    title: "Reading documents isn't set up yet",
+    message: "This server has no AI provider configured, so the document was not processed.",
+  },
   "status-conflict": {
     variant: "warning",
     title: "That change isn't possible right now",

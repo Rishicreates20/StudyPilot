@@ -181,6 +181,8 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `LLM_PROVIDER` | For roadmaps | No | empty (AI off) | `gemini` or `fake`. Empty: "Generate roadmap" answers that AI isn't set up and queues nothing. `fake` is a labelled stand-in for local development and tests; the API refuses to start with it in staging or production. |
 | `GEMINI_API_KEY` | `gemini` only | **Yes** | — | From Google AI Studio. Server-only: sent to Google in a request header, never logged, never returned. Set it in `services/api/.env` yourself; never paste it into chat or a tracked file. |
 | `GEMINI_MODEL` | No | No | `gemini-3.6-flash` | Planning model. Measured on one roadmap request: `gemini-3.5-flash-lite` 6 s (thinner plans), `gemini-3.6-flash` 18 s, `gemini-3.8-flash` 96 s and sometimes "high demand". Check Google's current list before changing it. |
+| `GEMINI_FALLBACK_MODELS` | No | No | empty | Comma-separated models to try, in order, when `GEMINI_MODEL` answers "daily allowance used up", "rate limited" or "high demand". The free tier allows about 20 generation requests per model per day, so a few alternatives keep a study session going. Each name must look like a model id; the model that answered is recorded with the result. |
+| `GEMINI_THINKING_LEVEL` | No | No | empty | `minimal`, `low`, `medium` or `high`: how long a Gemini 3 model may think before answering. `low` is much faster for the long structured answers this app asks for; empty uses the model's own default. A model that does not accept a level is asked without one. |
 | `GEMINI_BASE_URL` | No | No | `https://generativelanguage.googleapis.com/v1beta` | Only for tests and proxies |
 | `LLM_TIMEOUT_SECONDS` / `LLM_MAX_OUTPUT_TOKENS` / `LLM_TEMPERATURE` | No | No | `180` / `24000` / `0.4` | Per-call limits |
 | `JOB_MAX_ATTEMPTS` | No | No | `3` | Tries per job; only transient failures are retried |
@@ -194,6 +196,14 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `QUIZ_QUESTION_COUNT` · `QUIZ_SHORT_ANSWERS` | No | No | `5` · `1` | Questions per quiz (3–10), and how many of them are short answers graded by a model (0–2) |
 | `MASTERY_NEEDS_PRACTICE_BELOW` · `MASTERY_MASTERED_FROM` | No | No | `70` · `90` | Percent thresholds: below the first a topic needs practice, from the second it is mastered |
 | `MASTERY_RECENCY_DECAY` · `MASTERY_MIN_ANSWERS` | No | No | `0.7` · `4` | How much an older attempt counts relative to the next one; answers needed before a score is firm |
+| `SUPABASE_PUBLISHABLE_KEY` | For uploads | No (public by design) | — | The same publishable key as the web app's. Storage's gateway wants it next to the learner's own token. **Never put the service-role / secret key here** (it is not used and would bypass row security) |
+| `DOCUMENT_STORAGE` · `DOCUMENT_LOCAL_DIR` · `DOCUMENT_BUCKET` | No | No | `supabase` · `.data/documents` · `documents` | Where uploads are kept. `local` (a folder) is for development and tests only and is refused when `APP_ENV` is staging or production |
+| `DOCUMENT_MAX_BYTES` · `DOCUMENT_MAX_PAGES` · `DOCUMENT_MAX_CHARS` · `DOCUMENT_MAX_OCR_PAGES` | No | No | `10485760` · `300` · `1000000` · `20` | One file, its pages, the text taken from it, and how many scanned pages the vision model may read |
+| `DOCUMENTS_PER_GOAL` · `DOCUMENTS_PER_USER` · `DOCUMENT_JOBS_PER_USER_PER_DAY` | No | No | `20` · `100` · `100` | Document counts, and processing jobs per rolling 24 hours |
+| `DOCUMENT_SIGNED_URL_SECONDS` | No | No | `3600` | How long the signed link that lets the worker read an uploaded file stays valid |
+| `EMBEDDING_MODEL` | No | No | `gemini-embedding-001` | Embedding model (the vector size is fixed at 1536 by the database column) |
+| `CHUNK_TARGET_CHARS` · `CHUNK_OVERLAP_CHARS` | No | No | `1200` · `200` | Passage size and overlap (overlap must be under half the size) |
+| `RETRIEVAL_TOP_K` · `RETRIEVAL_MIN_SIMILARITY` · `DOCUMENT_SEARCHES_PER_USER_PER_HOUR` | No | No | `6` · `0.58` · `120` | Passages per search or lesson, the similarity a passage needs, and searches per learner per hour (per API process) |
 | `CORS_ALLOWED_ORIGINS` | No | No | `http://localhost:3000` | Web origins allowed to call the API from a browser |
 | `LOG_LEVEL`, `APP_NAME`, `APP_VERSION` | No | No | `INFO`, `StudyPilot`, `0.1.0` | Logging and reporting |
 
@@ -208,6 +218,18 @@ Locally, email confirmation is off (`supabase/config.toml`), so sign-up signs yo
 | `NEXT_PUBLIC_APP_NAME` | No | No | Product name shown in the UI |
 
 If Supabase is not configured in development, the sign-in and sign-up pages show a "Sign-in isn't set up yet" card naming the variables instead of failing. Production builds and servers refuse to start without them.
+
+### Storage (study documents)
+
+Uploaded documents live in a **private** Storage bucket named `documents` (10 MB, PDF / text / PNG / JPEG / WebP). The documents migration creates the bucket and three row-security policies on `storage.objects` (an authenticated learner may select, insert and delete only objects whose first folder is their own user id; there is no update policy) **when Storage is installed**. On a hosted project it is, so applying the migration (Step 4) is enough; afterwards:
+
+1. In the dashboard, **Storage → documents**: it must be listed as **Private**, with the size limit and the MIME types above.
+2. Put the **publishable key** in the API's environment as `SUPABASE_PUBLISHABLE_KEY` (and the same value the web app already has). The API and the worker never need the service-role/secret key: the API calls Storage with each learner's own token, and the worker reads through a signed link the API made for one object.
+3. Smoke test with a throwaway account on the deployed app: upload a small text file, open it, download the original, delete it, then check **Storage → documents** is empty again.
+
+A local `supabase start` stack that excludes `storage-api` (as CI's does) has no bucket; use `DOCUMENT_STORAGE=local` there. **This path has not been run against real Supabase Storage by the project's author**; step 3 is how to confirm it.
+
+**Retention.** Deleting a document or an archived goal in the app also deletes its files. Deleting an *account* directly in Supabase removes its database rows but **not** its files, because a row delete never removes a Storage object: remove the folder `documents/<user id>/` from Storage as part of deleting an account (an in-app account deletion that does this is planned for M9).
 
 ## 5. What is verified, and how
 
@@ -236,6 +258,8 @@ The rows marked "only in CI" are the ones this machine cannot run against Supaba
 | You sign in successfully but keep landing on sign-in with "Your session has ended" | The API rejects tokens Supabase issues: signing mode mismatch (`jwks` vs `hs256`), a different `SUPABASE_URL` in the API than in the web app, or (for a deleted account) the account no longer exists | Compare `SUPABASE_URL` in both apps and re-check Step 5. The API log line `auth.rejected` carries a `reason` category, never the token: `reason=unexpected_algorithm` means the project signs with the other kind of key (for example the project issues ES256 tokens but `SUPABASE_JWT_MODE=hs256` is set): open `https://<ref>.supabase.co/auth/v1/.well-known/jwks.json`; if it lists a key, use `jwks` mode (no secret needed). |
 | "Generate roadmap" says AI isn't set up (503 `AI_NOT_CONFIGURED`) | `LLM_PROVIDER` is empty, or `gemini` without `GEMINI_API_KEY` | Set them in `services/api/.env` and restart the API **and** the worker |
 | A roadmap job stays "Waiting for a free worker…" | The worker process isn't running | `npm run dev:worker` (the page says so after 45 s). Queued jobs are kept and start as soon as a worker runs. |
+| A roadmap, lesson or quiz fails with "The AI service's daily allowance for this account is used up" (`AI_QUOTA_EXHAUSTED`) | Google's per-model daily allowance is spent; it resets after the number of hours the message gives | Add models to `GEMINI_FALLBACK_MODELS` (each has its own allowance), set `GEMINI_THINKING_LEVEL=low`, or wait; restart the API **and** the worker |
+| A document stays at "Reading…" for minutes and then fails with a busy message | The embedding service's per-minute limit; the worker waits and retries by itself, up to a bound | Open the document and choose "Try indexing again": the pages already read are kept |
 | The roadmap job fails with `AI_AUTH_FAILED` | The provider rejected the API key | Check `GEMINI_API_KEY`, restart the worker |
 | 503 `AUTH_UNAVAILABLE` | The API could not fetch the JWKS and has no cached keys | Check `SUPABASE_URL` and network egress |
 | 401 `ACCOUNT_NOT_FOUND` after sign-in | The user was deleted in Supabase (the token is still valid until it expires) | Sign in again with a different account; deleting a user also deletes their goals |

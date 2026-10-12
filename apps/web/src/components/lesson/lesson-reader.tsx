@@ -455,7 +455,12 @@ export function LessonReader({
             </section>
           )}
 
-          <Sources references={content.source_references} />
+          <Sources
+            goalId={goalId}
+            grounding={content.grounding}
+            references={content.source_references}
+            citations={lesson.citations ?? []}
+          />
 
           <footer className="space-y-2 border-t pt-4 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">

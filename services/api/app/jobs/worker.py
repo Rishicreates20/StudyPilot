@@ -6,7 +6,7 @@ from contextlib import suppress
 
 import structlog
 
-from app.jobs import queue
+from app.jobs import document_store, queue
 from app.jobs.runner import process_job
 from app.jobs.runtime import WorkerEnv
 
@@ -37,8 +37,12 @@ class Worker:
         """Recover jobs whose lease ran out (their worker died). Returns how many."""
         async with self.env.database.system_session() as connection:
             recovered = await queue.reap_expired(connection)
+            # A reaped document job may have ended for good without saying so on its document.
+            settled = await document_store.settle_documents(connection)
         for job_id in recovered:
             log.warning("job.recovered", job_id=str(job_id))
+        for document_id in settled:
+            log.warning("document.settled_as_failed", document_id=str(document_id))
         return len(recovered)
 
     async def run(self, stop: asyncio.Event) -> None:

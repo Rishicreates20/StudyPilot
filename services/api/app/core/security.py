@@ -334,3 +334,21 @@ async def get_principal(
 
 
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
+
+
+async def get_access_token(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> str:
+    """The raw bearer token of the request, for the one thing that needs it: file storage.
+
+    Supabase Storage applies its row security to *the learner's own token*, which is how this
+    project reaches private files without holding the service-role key. The token has already been
+    verified by ``get_principal`` (every ``/v1`` route depends on it); this only hands it on. It
+    must never be logged, stored or returned.
+    """
+    if credentials is None or credentials.scheme.lower() != "bearer" or not credentials.credentials:
+        raise AuthenticationError("Authentication required.", code="UNAUTHENTICATED")
+    return credentials.credentials
+
+
+AccessToken = Annotated[str, Depends(get_access_token)]

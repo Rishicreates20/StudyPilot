@@ -45,8 +45,8 @@ export function RegenerateDialog({ goalId, hasRoadmap }: RegenerateDialogProps) 
           <DialogTitle>{hasRoadmap ? "Make a new version" : "Generate a roadmap"}</DialogTitle>
           <DialogDescription>
             {hasRoadmap
-              ? "A new version is added. Your current roadmap and every earlier version stay available, and you can switch back at any time."
-              : "Your roadmap is planned from this goal's level, daily time and target date."}
+              ? "A new version is added, planned from this goal and from the documents on it that are ready now. Your current roadmap and every earlier version stay available, and you can switch back at any time."
+              : "Your roadmap is planned from this goal's level, daily time and target date, and from the documents on it that are ready."}
           </DialogDescription>
         </DialogHeader>
         <form action={generateRoadmapAction.bind(null, goalId)} className="space-y-5">

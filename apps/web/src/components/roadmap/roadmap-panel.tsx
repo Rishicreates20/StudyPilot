@@ -142,7 +142,7 @@ export function RoadmapPanel({ goalId, goalStatus, state, timeZone }: RoadmapPan
           description={
             archived
               ? "Restore this goal to generate a roadmap for it."
-              : "StudyPilot plans a step-by-step roadmap from your level, daily time and target date. It is made in the background, and you can revise or regenerate it later without losing earlier versions."
+              : "StudyPilot plans a step-by-step roadmap from your level, daily time and target date, and follows any documents you have uploaded here once they are ready. It is made in the background, and you can revise or regenerate it later without losing earlier versions."
           }
           action={
             archived ? undefined : (

@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   poweredByHeader: false,
   reactStrictMode: true,
+  experimental: {
+    // A document upload is a Server Action whose body is the file itself: the default 1 MB limit
+    // would refuse a normal PDF. The API enforces the real limit (10 MB by default) on the bytes.
+    serverActions: { bodySizeLimit: "11mb" },
+  },
   ...(standalone
     ? { output: "standalone", outputFileTracingRoot: path.resolve(process.cwd(), "../..") }
     : {}),

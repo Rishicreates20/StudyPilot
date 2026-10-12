@@ -55,6 +55,10 @@ async def retry_job(
         return await quizzes_service.retry_quiz_job(connection, principal, job, settings=settings)
     if job.job_type == "grade":
         raise ConflictError("Marking is retried from the quiz results.", code="JOB_NOT_RETRYABLE")
+    if job.job_type == "document":
+        raise ConflictError(
+            "A document is processed again from its own page.", code="JOB_NOT_RETRYABLE"
+        )
     request = await jobs_repo.get_request(connection, principal.user_id, job_id) or {}
     feedback = request.get("feedback")
     return await roadmaps_service.start_generation(

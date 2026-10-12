@@ -9,7 +9,7 @@ from app.ai.fake import FakeProvider
 from app.ai.gemini import GeminiProvider
 from app.ai.provider import LLMNotConfigured
 from app.core.config import AppEnv, LlmProviderName
-from support.settings import valid_local_settings
+from support.settings import IsolatedSettings, valid_local_settings
 
 PRODUCTION: dict[str, object] = {
     "app_env": AppEnv.PRODUCTION,
@@ -113,3 +113,25 @@ def test_the_factory_refuses_when_nothing_is_configured() -> None:
         build_provider(valid_local_settings(), client)
     with pytest.raises(LLMNotConfigured):
         build_provider(valid_local_settings(llm_provider="gemini"), client)
+
+
+def test_fallback_models_follow_the_main_model_without_repeats() -> None:
+    settings = IsolatedSettings(
+        app_env=AppEnv.TEST,
+        gemini_model="model-a",
+        gemini_fallback_models=" model-b, model-a ,model-c,, ",
+    )
+
+    assert settings.gemini_fallback_models == "model-b,model-a,model-c"
+    assert settings.gemini_models == ("model-a", "model-b", "model-c")
+
+
+def test_no_fallback_models_means_just_the_main_one() -> None:
+    assert IsolatedSettings(app_env=AppEnv.TEST, gemini_model="model-a").gemini_models == (
+        "model-a",
+    )
+
+
+def test_a_fallback_model_name_cannot_carry_a_path_or_a_space() -> None:
+    with pytest.raises(ValidationError):
+        IsolatedSettings(app_env=AppEnv.TEST, gemini_fallback_models="good,../bad")

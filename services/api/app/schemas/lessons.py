@@ -73,6 +73,26 @@ class LessonVersion(BaseModel):
     created_at: datetime
 
 
+class Citation(BaseModel):
+    """A lesson's pointer to a passage of the learner's own document, looked up as it is now.
+
+    Stored lessons keep only the document and passage ids. Here they are resolved against what
+    still exists, so a citation to a document the learner later deleted is shown as unavailable
+    instead of keeping a copy of the document's text alive.
+    """
+
+    source_id: str
+    chunk_id: str
+    note: str | None
+    available: bool
+    document_id: UUID | None = None
+    document_title: str | None = None
+    # "p. 3", "pp. 3 to 4" or "part 2".
+    position: str | None = None
+    page_start: int | None = None
+    excerpt: str | None = None
+
+
 class LessonDetail(LessonVersion):
     """One version of a lesson with its content and how it was made."""
 
@@ -86,6 +106,8 @@ class LessonDetail(LessonVersion):
     prompt_version: str
     provider: str
     model_id: str
+    # One entry per source the lesson cites, in citation order (empty for an ungrounded lesson).
+    citations: list[Citation] = Field(default_factory=list[Citation])
 
 
 class ProgressState(BaseModel):

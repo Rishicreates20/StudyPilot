@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
-JobType = Literal["roadmap", "lesson", "quiz", "grade"]
+JobType = Literal["roadmap", "lesson", "quiz", "grade", "document"]
 
 
 class GenerationJob(BaseModel):
@@ -20,6 +20,8 @@ class GenerationJob(BaseModel):
     item_id: UUID | None
     # The quiz attempt a grading job marks; None for every other kind of job.
     attempt_id: UUID | None
+    # The document a document job processes; None for every other kind of job.
+    document_id: UUID | None
     status: JobStatus
     # Where the job is: queued, starting, loading, planning or writing, validated, saving,
     # waiting_retry, done, failed, cancelled. For display only; branch on `status`.

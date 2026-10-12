@@ -47,6 +47,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One document, with its latest processing job */
+        get: operations["get_document_v1_documents__document_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete a document, its file, its pages and its indexed passages */
+        delete: operations["delete_document_v1_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename a document */
+        patch: operations["rename_document_v1_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/v1/documents/{document_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Use the extracted text as it stands: index it
+         * @description Queues indexing of the pages as stored (including the learner's corrections). Also the way
+         *     to retry indexing that failed after the pages were saved.
+         */
+        post: operations["confirm_document_v1_documents__document_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the original file
+         * @description Always an attachment, never displayed in the browser.
+         */
+        get: operations["download_document_v1_documents__document_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{document_id}/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The text extracted from a document, page by page */
+        get: operations["list_document_pages_v1_documents__document_id__pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{document_id}/pages/{page_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Correct the text read from a picture, while the document waits for review */
+        put: operations["edit_document_page_v1_documents__document_id__pages__page_number__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{document_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the stored file again from scratch
+         * @description Discards the extracted text (including corrections) and processes the file again.
+         */
+        post: operations["reprocess_document_v1_documents__document_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/goals": {
         parameters: {
             query?: never;
@@ -99,7 +213,10 @@ export interface paths {
         get: operations["read_goal_v1_goals__goal_id__get"];
         put?: never;
         post?: never;
-        /** Permanently delete an archived goal */
+        /**
+         * Permanently delete an archived goal
+         * @description Also removes the goal's uploaded files from storage (its rows cascade).
+         */
         delete: operations["delete_goal_v1_goals__goal_id__delete"];
         options?: never;
         head?: never;
@@ -108,6 +225,66 @@ export interface paths {
          * @description Changes only the fields sent. ``null`` clears the description or the target date.
          */
         patch: operations["update_goal_v1_goals__goal_id__patch"];
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a goal's study documents, with what can be done here */
+        get: operations["list_documents_v1_goals__goal_id__documents_get"];
+        put?: never;
+        /**
+         * Upload a PDF, a text file or a picture of notes
+         * @description The raw file is the request body. What the file *is* is decided from its bytes, never from
+         *     its name or `Content-Type`. Processing runs in the background: poll the returned `job`.
+         */
+        post: operations["upload_document_v1_goals__goal_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/documents/paste": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add pasted study material */
+        post: operations["paste_material_v1_goals__goal_id__documents_paste_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/documents/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find the passages of this goal's documents that answer a question
+         * @description Only the caller's own ready documents are searched. `enough_evidence: false` means nothing
+         *     matched well enough: the material doesn't cover the question.
+         */
+        post: operations["search_documents_v1_goals__goal_id__documents_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/goals/{goal_id}/jobs": {
@@ -727,6 +904,34 @@ export interface components {
              */
             type: "callout";
         };
+        /**
+         * Citation
+         * @description A lesson's pointer to a passage of the learner's own document, looked up as it is now.
+         *
+         *     Stored lessons keep only the document and passage ids. Here they are resolved against what
+         *     still exists, so a citation to a document the learner later deleted is shown as unavailable
+         *     instead of keeping a copy of the document's text alive.
+         */
+        Citation: {
+            /** Available */
+            available: boolean;
+            /** Chunk Id */
+            chunk_id: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Document Title */
+            document_title?: string | null;
+            /** Excerpt */
+            excerpt?: string | null;
+            /** Note */
+            note: string | null;
+            /** Page Start */
+            page_start?: number | null;
+            /** Position */
+            position?: string | null;
+            /** Source Id */
+            source_id: string;
+        };
         /** CodeBlock */
         CodeBlock: {
             /** Caption */
@@ -747,6 +952,146 @@ export interface components {
             meaning: string;
             /** Term */
             term: string;
+        };
+        /** Document */
+        Document: {
+            /** Char Count */
+            char_count: number;
+            /** Chunk Count */
+            chunk_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Embedding Model */
+            embedding_model: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Indexed At */
+            indexed_at: string | null;
+            job?: components["schemas"]["GenerationJob"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pdf" | "text" | "image" | "pasted";
+            /**
+             * Needs Review
+             * @default false
+             */
+            needs_review: boolean;
+            /** Ocr Page Count */
+            ocr_page_count: number;
+            /** Original Name */
+            original_name: string | null;
+            /** Page Count */
+            page_count: number | null;
+            /** Paginated */
+            paginated: boolean;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "processing" | "review" | "ready" | "failed";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Warnings */
+            warnings: components["schemas"]["DocumentWarning"][];
+        };
+        /** DocumentLimits */
+        DocumentLimits: {
+            /** Accepted */
+            accepted: string[];
+            /** Documents Per Goal */
+            documents_per_goal: number;
+            /** Max Bytes */
+            max_bytes: number;
+            /** Max Ocr Pages */
+            max_ocr_pages: number;
+            /** Max Pages */
+            max_pages: number;
+        };
+        /** DocumentList */
+        DocumentList: {
+            /** Goal Archived */
+            goal_archived: boolean;
+            /** Indexing Available */
+            indexing_available: boolean;
+            /** Items */
+            items: components["schemas"]["Document"][];
+            limits: components["schemas"]["DocumentLimits"];
+            /** Ocr Available */
+            ocr_available: boolean;
+            /** Storage Available */
+            storage_available: boolean;
+        };
+        /** DocumentPage */
+        DocumentPage: {
+            /** Edited */
+            edited: boolean;
+            /** Legibility */
+            legibility: ("clear" | "partly" | "poor" | "none") | null;
+            /** Needs Review */
+            needs_review: boolean;
+            /** Page Number */
+            page_number: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "text_layer" | "ocr" | "text";
+            /** Text */
+            text: string;
+        };
+        /** DocumentPages */
+        DocumentPages: {
+            /** Editable */
+            editable: boolean;
+            /** Items */
+            items: components["schemas"]["DocumentPage"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** DocumentRename */
+        DocumentRename: {
+            /** Title */
+            title: string;
+        };
+        /**
+         * DocumentWarning
+         * @description Something worth knowing about how a document was read (never file content).
+         */
+        DocumentWarning: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Page */
+            page?: number | null;
         };
         /** FieldError */
         FieldError: {
@@ -770,6 +1115,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Document Id */
+            document_id: string | null;
             /** Error Code */
             error_code: string | null;
             /** Error Message */
@@ -792,7 +1139,7 @@ export interface components {
              * Job Type
              * @enum {string}
              */
-            job_type: "roadmap" | "lesson" | "quiz" | "grade";
+            job_type: "roadmap" | "lesson" | "quiz" | "grade" | "document";
             /** Lesson Id */
             lesson_id: string | null;
             /** Max Attempts */
@@ -1008,6 +1355,12 @@ export interface components {
             common_misconceptions: components["schemas"]["Misconception"][];
             /** Definitions */
             definitions: components["schemas"]["Definition"][];
+            /**
+             * Grounding
+             * @default none
+             * @enum {string}
+             */
+            grounding: "none" | "sources" | "no_match";
             /** Language */
             language: string;
             /** Learning Objectives */
@@ -1033,6 +1386,8 @@ export interface components {
             adjust: ("simpler" | "more_examples" | "deeper") | null;
             /** Based On Lesson Id */
             based_on_lesson_id: string | null;
+            /** Citations */
+            citations?: components["schemas"]["Citation"][];
             content: components["schemas"]["Lesson"];
             /** Content Version */
             content_version: number;
@@ -1264,6 +1619,11 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** PageEdit */
+        PageEdit: {
+            /** Text */
+            text: string;
+        };
         /** ParagraphBlock */
         ParagraphBlock: {
             /** Text */
@@ -1273,6 +1633,45 @@ export interface components {
              * @enum {string}
              */
             type: "paragraph";
+        };
+        /**
+         * PassageHit
+         * @description One passage that was really retrieved. These identifiers are what a citation points at.
+         */
+        PassageHit: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /** Content */
+            content: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Title */
+            document_title: string;
+            /** Keyword Match */
+            keyword_match: boolean;
+            /** Page End */
+            page_end: number;
+            /** Page Start */
+            page_start: number;
+            /** Position */
+            position: string;
+            /** Section Title */
+            section_title: string | null;
+            /** Similarity */
+            similarity: number;
+        };
+        /** PastedMaterial */
+        PastedMaterial: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
         };
         /**
          * Preferences
@@ -1757,6 +2156,24 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** SearchRequest */
+        SearchRequest: {
+            /** Document Ids */
+            document_ids?: string[] | null;
+            /** Limit */
+            limit?: number | null;
+            /** Query */
+            query: string;
+        };
+        /** SearchResult */
+        SearchResult: {
+            /** Enough Evidence */
+            enough_evidence: boolean;
+            /** Items */
+            items: components["schemas"]["PassageHit"][];
+            /** Searched Documents */
+            searched_documents: number;
+        };
         /** SimpleExplanation */
         SimpleExplanation: {
             /** Analogy */
@@ -1766,7 +2183,10 @@ export interface components {
         };
         /**
          * SourceReference
-         * @description A pointer to a chunk of the learner's own uploaded material that supports the lesson.
+         * @description A pointer to a passage of the learner's own uploaded material that supports the lesson.
+         *
+         *     In what the model writes these are short labels from the prompt ("S1" / "P2"); before a lesson
+         *     is stored, code replaces them with the real document and passage ids.
          */
         SourceReference: {
             /** Chunk Id */
@@ -2016,6 +2436,534 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+        };
+    };
+    get_document_v1_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    delete_document_v1_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description File storage or the AI service is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    rename_document_v1_documents__document_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    confirm_document_v1_documents__document_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    download_document_v1_documents__document_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_document_pages_v1_documents__document_id__pages_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentPages"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    edit_document_page_v1_documents__document_id__pages__page_number__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                page_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentPage"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    reprocess_document_v1_documents__document_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage or the AI service is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
                 };
             };
         };
@@ -2355,6 +3303,327 @@ export interface operations {
                 };
             };
             /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_documents_v1_goals__goal_id__documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    upload_document_v1_goals__goal_id__documents_post: {
+        parameters: {
+            query: {
+                /** @description The file's name. */
+                name: string;
+                /** @description A title to show. */
+                title?: string | null;
+            };
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The file is larger than the limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The file's content is not a supported type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The file is empty */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Today's processing allowance is used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage or the AI service is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    paste_material_v1_goals__goal_id__documents_paste_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PastedMaterial"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage or the AI service is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    search_documents_v1_goals__goal_id__documents_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResult"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal, document or page for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Searching too quickly */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage or the AI service is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

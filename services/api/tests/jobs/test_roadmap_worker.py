@@ -14,6 +14,7 @@ from app.core.db import Database
 from app.jobs import store
 from app.jobs.worker import Worker
 from support.database import admin, create_auth_user
+from support.documents import add_chunk, add_document
 from support.plans import changed, make_context
 from support.rows import add_goal, add_job, add_roadmap
 from support.worker import items_of, job_state, make_env, roadmaps_of, seed_job, worker_settings
@@ -66,7 +67,7 @@ async def test_a_queued_job_becomes_a_stored_versioned_roadmap(
     assert roadmap["job_id"] == job
     assert roadmap["is_synthetic"] is True
     assert roadmap["provider"] == "fake"
-    assert roadmap["prompt_version"] == "roadmap-planner/v1"
+    assert roadmap["prompt_version"] == "roadmap-planner/v2"
     assert roadmap["daily_minutes"] == 60
     assert roadmap["syllabus_basis"] in {"learner_stated", "general_knowledge"}
 
@@ -153,7 +154,7 @@ async def test_every_model_call_is_recorded_in_the_usage_ledger(
         ("roadmap.plan", "fake", None)
     ]
     assert events[0]["user_id"] == user
-    assert events[0]["prompt_version"] == "roadmap-planner/v1"
+    assert events[0]["prompt_version"] == "roadmap-planner/v2"
 
 
 # --- The time budget -------------------------------------------------------------------------
@@ -349,7 +350,7 @@ async def test_a_retry_does_not_pay_for_planning_again_when_the_plan_was_already
 ) -> None:
     _, goal, job = seed_job(database_dsn)
     plan = sample_plan(make_context().input_data())
-    meta = store.PlanMeta("roadmap-planner/v1", "fake", "fake-planner-1", True, 100, 3, 3)
+    meta = store.PlanMeta("roadmap-planner/v2", "fake", "fake-planner-1", True, 100, 3, 3)
     admin(database_dsn).execute(
         "update public.generation_jobs set checkpoint = %s where id = %s",
         (Jsonb(store.checkpoint_of(plan, meta)), job),
@@ -564,3 +565,163 @@ async def test_a_revision_cannot_be_based_on_someone_elses_roadmap(
     assert request.input_data["previous_plan"] is None  # Alice's plan was not loaded for Bob
     (bob_roadmap,) = roadmaps_of(database_dsn, bob_goal)
     assert bob_roadmap["based_on_roadmap_id"] is None
+
+
+# --- Planning from the learner's own documents ------------------------------------------------
+
+
+def add_notes(dsn: str, user: Any, goal: Any, **fields: Any) -> tuple[Any, list[Any]]:
+    """A ready 12-page document with three headed sections (no passage text is ever read)."""
+    document = add_document(
+        dsn, user, goal, title="DBMS notes", kind="pdf", page_count=12, **fields
+    )
+    chunks = [
+        add_chunk(
+            dsn,
+            user,
+            goal,
+            document,
+            0,
+            "First.",
+            section_title="Normalization",
+            page_start=1,
+            page_end=3,
+        ),
+        add_chunk(
+            dsn,
+            user,
+            goal,
+            document,
+            1,
+            "Second.",
+            section_title="Normalization",
+            page_start=3,
+            page_end=5,
+        ),
+        add_chunk(
+            dsn,
+            user,
+            goal,
+            document,
+            2,
+            "Third.",
+            section_title="Transactions",
+            page_start=6,
+            page_end=9,
+        ),
+        add_chunk(
+            dsn,
+            user,
+            goal,
+            document,
+            3,
+            "Fourth.",
+            section_title="Security",
+            page_start=10,
+            page_end=12,
+        ),
+    ]
+    return document, chunks
+
+
+async def test_a_plan_is_built_from_the_contents_of_the_learners_ready_documents(
+    database: Database, database_dsn: str
+) -> None:
+    user, goal, job = seed_job(database_dsn, daily_minutes=60)
+    document, chunks = add_notes(database_dsn, user, goal)
+    provider = FakeProvider(roadmap_responder)
+
+    await worker_for(database, database_dsn, provider).run_once()
+
+    assert job_state(database_dsn, job)["status"] == "completed"
+    sent = provider.requests[0].input_data
+    assert sent["has_uploaded_material"] is True
+    (notes,) = sent["uploaded_material"]
+    assert notes["contents"] == [
+        {"id": "C1", "title": "Normalization", "where": "pages 1-5"},
+        {"id": "C2", "title": "Transactions", "where": "pages 6-9"},
+        {"id": "C3", "title": "Security", "where": "pages 10-12"},
+    ]
+    # The model gets labels and positions, never a real identifier or any passage text.
+    assert str(document) not in str(sent) and str(chunks[0]) not in str(sent)
+    (roadmap,) = roadmaps_of(database_dsn, goal)
+    assert roadmap["syllabus_basis"] == "uploaded_document"
+    assert roadmap["prompt_version"] == "roadmap-planner/v2"
+    topics = [i for i in items_of(database_dsn, roadmap["id"]) if i["kind"] == "topic"]
+    assert [t["title"] for t in topics][:3] == [
+        "Part 1: Normalization",
+        "Part 2: Transactions",
+        "Part 3: Security",
+    ]
+
+
+async def test_the_stored_evidence_names_real_documents_and_passages_not_labels(
+    database: Database, database_dsn: str
+) -> None:
+    user, goal, _ = seed_job(database_dsn)
+    document, chunks = add_notes(database_dsn, user, goal)
+
+    await worker_for(database, database_dsn, FakeProvider(roadmap_responder)).run_once()
+
+    (roadmap,) = roadmaps_of(database_dsn, goal)
+    stored = {(e["source_id"], e["chunk_id"]) for e in roadmap["evidence"]}
+    # The first passage of each section.
+    assert stored == {
+        (str(document), str(chunks[0])),
+        (str(document), str(chunks[2])),
+        (str(document), str(chunks[3])),
+    }
+
+
+async def test_a_goal_without_ready_documents_is_planned_as_before(
+    database: Database, database_dsn: str
+) -> None:
+    user, goal, _ = seed_job(database_dsn)
+    # None of these count: still being read, waiting for the learner, or failed.
+    for status in ("queued", "processing", "review", "failed"):
+        add_notes(database_dsn, user, goal, status=status)
+    provider = FakeProvider(roadmap_responder)
+
+    await worker_for(database, database_dsn, provider).run_once()
+
+    sent = provider.requests[0].input_data
+    assert sent["has_uploaded_material"] is False and "uploaded_material" not in sent
+    (roadmap,) = roadmaps_of(database_dsn, goal)
+    assert roadmap["syllabus_basis"] == "learner_stated" and roadmap["evidence"] == []
+
+
+async def test_another_learners_or_goals_documents_never_shape_a_plan(
+    database: Database, database_dsn: str
+) -> None:
+    user, _, _ = seed_job(database_dsn)
+    other_goal = add_goal(database_dsn, user)
+    stranger = create_auth_user(database_dsn)
+    stranger_goal = add_goal(database_dsn, stranger)
+    add_notes(database_dsn, user, other_goal)
+    add_notes(database_dsn, stranger, stranger_goal)
+    provider = FakeProvider(roadmap_responder)
+
+    await worker_for(database, database_dsn, provider).run_once()
+
+    assert "uploaded_material" not in provider.requests[0].input_data
+
+
+async def test_a_plan_that_names_a_page_the_document_lacks_is_repaired(
+    database: Database, database_dsn: str
+) -> None:
+    user, goal, job = seed_job(database_dsn)
+    add_notes(database_dsn, user, goal)
+
+    def invent_a_page(request: StructuredRequest) -> Any:
+        return changed(
+            sample_plan(request.input_data),
+            lambda d: d["modules"][0]["topics"][0].update(description="Read pages 40-55 first."),
+        )
+
+    provider = FakeProvider(sequence(invent_a_page, roadmap_responder))
+
+    await worker_for(database, database_dsn, provider).run_once()
+
+    assert job_state(database_dsn, job)["status"] == "completed"
+    assert [r.purpose for r in provider.requests] == ["roadmap.plan", "roadmap.repair"]
+    assert "not in the uploaded material" in provider.requests[1].user

@@ -6,6 +6,16 @@ const USER_SAFE_CODES: ReadonlySet<string> = new Set([
   "GOAL_ARCHIVED",
   "GOAL_NOT_ARCHIVED",
   "INVALID_STATUS_TRANSITION",
+  // Documents: the API wrote these sentences for the learner (they never contain file content).
+  "DOCUMENT_EXISTS",
+  "DOCUMENT_LIMIT_REACHED",
+  "DOCUMENT_LIMIT_REACHED_TODAY",
+  "FILE_TOO_LARGE",
+  "FILE_TYPE_UNSUPPORTED",
+  "FILE_TYPE_MISMATCH",
+  "FILE_EMPTY",
+  "STORAGE_NOT_CONFIGURED",
+  "AI_NOT_CONFIGURED",
 ]);
 
 /**

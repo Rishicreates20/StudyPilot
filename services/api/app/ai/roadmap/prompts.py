@@ -1,8 +1,9 @@
-"""The Planning Agent's prompt, version ``roadmap-planner/v1``.
+"""The Planning Agent's prompt, version ``roadmap-planner/v2``.
 
 Prompts are code: a change to the wording is a change to behaviour, so it gets a new version
-string, and the version that produced a roadmap is stored with it. Never edit ``v1`` in place
-once roadmaps exist; add ``v2`` and switch ``PROMPT_VERSION``.
+string, and the version that produced a roadmap is stored with it. Never edit ``v2`` in place
+once roadmaps exist; add ``v3`` and switch ``PROMPT_VERSION``. (``v2`` added the "UPLOADED
+MATERIAL" section: the plan follows the contents of the learner's own documents.)
 
 Everything the learner typed (the goal's title and description, a revision request) is untrusted.
 It is JSON-encoded and fenced inside ``<learner_data>`` with ``<`` and ``>`` escaped, so the text
@@ -16,7 +17,7 @@ from app.ai.prompt_utils import data_block, escape_tags
 from app.ai.roadmap.context import PlanningContext
 from app.ai.roadmap.validation import Violation
 
-PROMPT_VERSION = "roadmap-planner/v1"
+PROMPT_VERSION = "roadmap-planner/v2"
 
 SYSTEM_PROMPT = """\
 You are the curriculum planner inside StudyPilot, a personal learning coach. You turn one \
@@ -39,6 +40,27 @@ list under "unknowns" what the learner must confirm with the official source.
 - Do not include links, book titles, video titles or citations. Add "evidence" references only \
 if learner material is supplied (has_uploaded_material is true); otherwise leave evidence empty \
 and never use "uploaded_document" as the basis.
+
+UPLOADED MATERIAL (only when has_uploaded_material is true)
+- "uploaded_material" lists the learner's own documents. Each has a "source" label such as "S1" \
+and a "contents" list: sections with an "id" such as "C3", a title and where it is ("pages 3-9"). \
+The titles were detected automatically, so a few are stray labels or diagram text: ignore those.
+- Build the roadmap from this material. Topics follow its sections in a sensible study order and \
+cover what the goal needs from it. Group small neighbouring sections into one topic and split \
+large ones; do not give a topic to every stray heading. Do not add large topics the material \
+does not cover unless the goal clearly needs them, and say so under assumptions if you do. Set \
+syllabus_basis to "uploaded_document". The material is the learner's own notes or textbook: it is \
+not an official syllabus, so still list under "unknowns" anything about an exam you could not \
+verify.
+- In "evidence" list the sections the plan is built on, as source_id (the "source" label) and \
+chunk_id (the section "id"), for example {"source_id": "S1", "chunk_id": "C3"}. Use only labels \
+that appear in uploaded_material.
+- You may say which pages a topic covers, copying them from the contents list ("pages 30-39"). \
+Never write a page number the contents list does not contain.
+- If the goal is a test or exam and the time is short, make every practice_task a self-test the \
+learner does after reading: for example answering multiple-choice questions on that topic's \
+pages. Order the topics so the whole material is covered, with the most examinable ideas \
+(definitions, differences, rules, syntax) given the most time.
 
 PLANNING RULES (software checks these afterwards; plans that break them are rejected)
 1. Write every text field in the first language listed under "languages", and set "language" to \

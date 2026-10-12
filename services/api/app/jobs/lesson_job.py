@@ -14,10 +14,11 @@ import structlog
 
 from app.ai.calls import CallRecord
 from app.ai.lesson.context import build_context
+from app.ai.lesson.grounding import ground_lesson
 from app.ai.lesson.schema import Adjust
 from app.ai.lesson.writer import write_lesson
 from app.ai.provider import LLMNotConfigured
-from app.jobs import lesson_store, queue, store
+from app.jobs import lesson_evidence, lesson_store, queue, store
 from app.jobs.errors import JobFailure, LeaseLost
 from app.jobs.queue import Job
 from app.jobs.runtime import Lease, WorkerEnv, as_uuid, set_stage
@@ -74,6 +75,7 @@ async def run_lesson(env: WorkerEnv, job: Job, lease: Lease) -> None:
     else:
         if env.provider is None:
             raise JobFailure("AI_NOT_CONFIGURED", LLMNotConfigured.user_message)
+        evidence = await lesson_evidence.gather_evidence(env, job, lease, facts)
         await set_stage(env, job, "writing", 20)
         context = build_context(
             goal,
@@ -81,6 +83,8 @@ async def run_lesson(env: WorkerEnv, job: Job, lease: Lease) -> None:
             adjust=adjust,
             feedback=feedback,
             previous_lesson=previous if (adjust or feedback) else None,
+            evidence=evidence.chunks,
+            has_documents=evidence.has_documents,
         )
 
         async def observe(record: CallRecord) -> None:
@@ -89,7 +93,10 @@ async def run_lesson(env: WorkerEnv, job: Job, lease: Lease) -> None:
 
         outcome = await write_lesson(env.provider, context, observer=observe)
         lease.check()
-        lesson = outcome.lesson
+        # The model cited labels; code swaps in the real ids and decides how grounded this is.
+        lesson = ground_lesson(
+            outcome.lesson, context.evidence, has_documents=context.has_documents
+        )
         meta = lesson_store.LessonMeta(
             prompt_version=outcome.prompt_version,
             provider=outcome.provider,
@@ -123,5 +130,7 @@ async def run_lesson(env: WorkerEnv, job: Job, lease: Lease) -> None:
         lesson_id=str(saved.id),
         version=saved.version,
         sections=len(lesson.sections),
+        grounding=lesson.grounding,
+        citations=len(lesson.source_references),
         synthetic=meta.synthetic,
     )

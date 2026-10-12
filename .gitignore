@@ -52,3 +52,6 @@ tmp/
 
 # --- Claude Code local settings (per-developer) ----------------------------
 .claude/settings.local.json
+
+# Uploaded study documents of a local run (DOCUMENT_STORAGE=local): never committed
+services/api/.data/
