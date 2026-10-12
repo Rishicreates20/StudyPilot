@@ -75,6 +75,7 @@ Python tools run as `uv run python -m <tool>` (never the `pytest`/`ruff`/`pyrigh
 ## Dev-environment gotchas (primary machine: Windows 11 Home)
 
 - **Smart App Control is on and its verdicts change.** Unsigned native code can be blocked, including things that ran the day before (2026-10-10: the venv launcher and `ruff.exe`). Test any new native dependency early. Never suggest disabling the setting.
+- Inside the Claude desktop app (sandboxed, `%APPDATA%` is redirected) `uv sync` fails with "Missing expected target directory for Python minor version link". Set `UV_PYTHON_INSTALL_DIR=C:\uv-python` (and put `%USERPROFILE%\.local\bin` on `PATH`) before running `uv`; observed working on 2026-10-12.
 - Long paths are disabled: work from a short path, not from deeply nested app-data folders. The current checkout lives under OneDrive, which makes installs slow (a first `npm install` took ~5 minutes); prefer a folder outside cloud sync.
 - Write multi-line files and any script containing template strings or backticks with the Write tool, not shell `-e`/heredocs: quoting mangled backticks here more than once. Small heredocs without backticks are fine.
 - Playwright starts the API, the **worker** (`wait: { stdout: /worker\.started/ }`) and the web app, with `LLM_PROVIDER=fake`; no AI key is needed for the browser tests.
