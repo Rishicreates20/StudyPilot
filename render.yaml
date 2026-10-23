@@ -1,0 +1,121 @@
+# Render Blueprint: the StudyPilot API and its background worker (PROPOSED, never applied).
+#
+# Nothing here has been run. Creating the Blueprint needs a Render account and a payment method;
+# only the owner can do that. Read docs/DEPLOYMENT.md first: it lists every value to enter and
+# the order to do things in.
+#
+# Both services build the SAME image (services/api/Dockerfile; Docker builds its last stage,
+# `runtime`, which has no test tools). Only the start command differs: the API uses the image's
+# own CMD (uvicorn), the worker runs `python -m app.worker`.
+#
+# Secrets: every `sync: false` variable is asked for ONCE, when the Blueprint is first created
+# (Render ignores it on later syncs, so a variable added later must be added by hand in the
+# dashboard). Render does not allow `sync: false` inside environment groups, so each service
+# lists its own variables; enter the same value in both.
+#
+# Never put a database password, an API key or the Supabase service-role key in this file: the
+# repository is public. The service-role key is not used by this project at all.
+#
+# [verify] against https://render.com/docs/blueprint-spec before applying: field names were read
+# from that page on 2026-10-23, but plan names change. Free instances do not exist for workers.
+
+services:
+  # --- The API -----------------------------------------------------------------------------
+  - type: web
+    name: studypilot-api
+    runtime: docker
+    # Same region as the Supabase project (ap-southeast-1, Singapore). It cannot be changed later.
+    region: singapore
+    plan: starter
+    branch: main
+    # Deploy only after the repository's CI checks pass on the commit.
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./services/api/Dockerfile
+    dockerContext: ./services/api
+    # Liveness only. /readyz also checks the database; using it here would restart the API
+    # whenever the database blips.
+    healthCheckPath: /healthz
+    envVars:
+      # The image listens on 8000 (see the Dockerfile); Render must be told, or it assumes its own.
+      - key: PORT
+        value: "8000"
+      - key: APP_ENV
+        value: production
+      - key: APP_NAME
+        value: StudyPilot
+      - key: LOG_LEVEL
+        value: INFO
+      # The web app's public https address, for example https://studypilot.vercel.app (no path).
+      # Comma-separate more than one. Must be https in production.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # The Supabase SESSION POOLER string, ending ?sslmode=require. Contains the database
+      # password: a secret.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      # Public by design, but kept out of this public file anyway (same value as the web app's
+      # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY). Needed for document Storage.
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      # The project signs tokens with ES256, so the API fetches the public keys; no secret.
+      - key: SUPABASE_JWT_MODE
+        value: jwks
+      - key: DOCUMENT_STORAGE
+        value: supabase
+      # Real AI. `fake` is refused in production.
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      # A free Gemini key allows about 20 requests per model per day; later models take over.
+      - key: GEMINI_FALLBACK_MODELS
+        value: gemini-3.7-flash,gemini-3-flash-preview
+      - key: GEMINI_THINKING_LEVEL
+        value: low
+      # Supabase's session pooler allows few connections: keep both services' pools small.
+      - key: DB_POOL_MAX_SIZE
+        value: "6"
+
+  # --- The background worker (roadmap, lesson, quiz, marking and document jobs) ---------------
+  - type: worker
+    name: studypilot-worker
+    runtime: docker
+    region: singapore
+    # No `plan`: Render's default worker size is used. Free is not available for workers.
+    branch: main
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./services/api/Dockerfile
+    dockerContext: ./services/api
+    dockerCommand: python -m app.worker
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_NAME
+        value: StudyPilot
+      - key: LOG_LEVEL
+        value: INFO
+      # Read by the shared settings, though the worker serves no browser. Same value as the API.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_MODE
+        value: jwks
+      - key: DOCUMENT_STORAGE
+        value: supabase
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_FALLBACK_MODELS
+        value: gemini-3.7-flash,gemini-3-flash-preview
+      - key: GEMINI_THINKING_LEVEL
+        value: low
+      - key: DB_POOL_MAX_SIZE
+        value: "4"
