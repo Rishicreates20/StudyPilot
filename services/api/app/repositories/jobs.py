@@ -15,8 +15,8 @@ from app.core.db import UserConnection
 from app.schemas.jobs import GenerationJob, JobType
 
 _SELECT = """
-    select j.id, j.goal_id, j.item_id, j.attempt_id, j.document_id, j.job_type, j.status,
-           j.stage, j.progress,
+    select j.id, j.goal_id, j.item_id, j.attempt_id, j.document_id, j.export_id, j.job_type,
+           j.status, j.stage, j.progress,
            j.attempts, j.max_attempts, j.cancel_requested, j.error_code, j.error_message,
            r.id as roadmap_id, l.id as lesson_id, z.id as quiz_id, j.created_at, j.started_at,
            j.finished_at
@@ -37,12 +37,22 @@ async def insert(
     job_type: JobType = "roadmap",
     item_id: UUID | None = None,
     document_id: UUID | None = None,
+    export_id: UUID | None = None,
 ) -> GenerationJob:
     cursor = await connection.execute(
         "insert into public.generation_jobs"
-        " (user_id, goal_id, item_id, document_id, job_type, idempotency_key, request)"
-        " values (%s, %s, %s, %s, %s, %s, %s) returning id",
-        (user_id, goal_id, item_id, document_id, job_type, idempotency_key, Jsonb(request)),
+        " (user_id, goal_id, item_id, document_id, export_id, job_type, idempotency_key, request)"
+        " values (%s, %s, %s, %s, %s, %s, %s, %s) returning id",
+        (
+            user_id,
+            goal_id,
+            item_id,
+            document_id,
+            export_id,
+            job_type,
+            idempotency_key,
+            Jsonb(request),
+        ),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -155,6 +165,39 @@ async def latest_per_document(
     )
     jobs = [GenerationJob.model_validate(row) for row in await cursor.fetchall()]
     return {job.document_id: job for job in jobs if job.document_id is not None}
+
+
+async def latest_for_export(
+    connection: UserConnection, user_id: UUID, export_id: UUID
+) -> GenerationJob | None:
+    """The newest job of an export, whatever its state."""
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.export_id = %s"
+        " order by j.created_at desc, j.id desc limit 1",
+        (user_id, export_id),
+    )
+    row = await cursor.fetchone()
+    return GenerationJob.model_validate(row) if row else None
+
+
+async def latest_per_export(
+    connection: UserConnection, user_id: UUID, goal_id: UUID
+) -> dict[UUID, GenerationJob]:
+    """The newest job of every export of a goal, by export id."""
+    cursor = await connection.execute(
+        "select distinct on (export_id) id from public.generation_jobs"
+        " where user_id = %s and goal_id = %s and export_id is not null"
+        " order by export_id, created_at desc, id desc",
+        (user_id, goal_id),
+    )
+    ids = [row["id"] for row in await cursor.fetchall()]
+    if not ids:
+        return {}
+    cursor = await connection.execute(
+        f"{_SELECT} where j.user_id = %s and j.id = any(%s)", (user_id, ids)
+    )
+    jobs = [GenerationJob.model_validate(row) for row in await cursor.fetchall()]
+    return {job.export_id: job for job in jobs if job.export_id is not None}
 
 
 async def latest_for_attempt(

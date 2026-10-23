@@ -26,6 +26,7 @@ from app.core.config import EX_CONFIG, Settings, load_settings_or_exit
 from app.core.db import Database
 from app.core.logging import configure_logging
 from app.documents.storage import build_document_files
+from app.exports.files import build_export_files
 from app.jobs.runtime import WorkerEnv
 from app.jobs.worker import Worker
 
@@ -56,6 +57,7 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
                 worker_id=_worker_id(),
                 provider=provider,
                 files=build_document_files(settings, client),
+                export_files=build_export_files(settings, client),
             )
             await Worker(env).run(stop)
     finally:

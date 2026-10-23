@@ -12,6 +12,7 @@ from app.ai.provider import LLMProvider
 from app.core.config import AppEnv, Settings
 from app.core.db import Database
 from app.documents.storage import DocumentFiles
+from app.exports.files import ExportFiles
 from app.jobs.runtime import WorkerEnv
 from support.database import admin, create_auth_user
 from support.plans import TODAY
@@ -42,6 +43,7 @@ def make_env(
     worker_id: str = "test-worker",
     today: date = TODAY,
     files: DocumentFiles | None = None,
+    export_files: ExportFiles | None = None,
     sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> WorkerEnv:
     async def instantly(_seconds: float) -> None:
@@ -53,6 +55,7 @@ def make_env(
         worker_id=worker_id,
         provider=provider,
         files=files,
+        export_files=export_files,
         today=lambda: today,
         random=lambda: 0.5,  # jitter factor 1.0: backoff is exactly base * 2^(attempt-1)
         sleep=sleep or instantly,
@@ -96,12 +99,14 @@ def run_worker_once(
     provider: LLMProvider | None = None,
     *,
     files: DocumentFiles | None = None,
+    export_files: ExportFiles | None = None,
     **settings: Any,
 ) -> bool:
     """Process one queued job with the real worker, from a synchronous test.
 
     Uses the built-in test provider unless one is given; ``files`` is where document jobs read
-    uploaded files from. Returns False if nothing was queued.
+    uploaded files from and ``export_files`` where export jobs store theirs. Returns False if
+    nothing was queued.
     """
 
     from app.ai.factory import builtin_responder
@@ -115,7 +120,8 @@ def run_worker_once(
         await database.open(wait=True)
         try:
             chosen = provider if provider is not None else FakeProvider(builtin_responder)
-            return await Worker(make_env(database, config, chosen, files=files)).run_once()
+            env = make_env(database, config, chosen, files=files, export_files=export_files)
+            return await Worker(env).run_once()
         finally:
             await database.close()
 

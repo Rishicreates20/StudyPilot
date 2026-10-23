@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response
 
-from app.api.deps import DatabaseDep, FilesDep
+from app.api.deps import DatabaseDep, ExportFilesDep, FilesDep
 from app.core.errors import ProblemDetail
 from app.core.security import AccessToken, CurrentPrincipal
 from app.schemas.goals import (
@@ -16,6 +16,7 @@ from app.schemas.goals import (
     GoalUpdate,
 )
 from app.services import documents as documents_service
+from app.services import exports as exports_service
 from app.services import goals as goals_service
 
 router = APIRouter(prefix="/goals", tags=["goals"])
@@ -155,10 +156,14 @@ async def delete_goal(
     token: AccessToken,
     database: DatabaseDep,
     files: FilesDep,
+    export_files: ExportFilesDep,
 ) -> Response:
-    """Also removes the goal's uploaded files from storage (its rows cascade)."""
+    """Also removes the goal's uploaded and exported files from storage (its rows cascade)."""
     await documents_service.purge_goal_files(
         database, principal, token, files=files, goal_id=goal_id
+    )
+    await exports_service.purge_goal_exports(
+        database, principal, token, files=export_files, goal_id=goal_id
     )
     async with database.user_transaction(principal) as connection:
         await goals_service.delete_goal(connection, principal, goal_id)

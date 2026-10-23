@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from app.ai.lesson.schema import Lesson, SourceReference
-from app.core.db import UserConnection
+from app.core.db import ReadConnection, UserConnection
 from app.retrieval.search import position_text
 from app.schemas.lessons import (
     Citation,
@@ -79,7 +79,7 @@ async def get_topic(connection: UserConnection, user_id: UUID, item_id: UUID) ->
 
 
 async def study_by_item(
-    connection: UserConnection, user_id: UUID, roadmap_id: UUID
+    connection: ReadConnection, user_id: UUID, roadmap_id: UUID
 ) -> dict[UUID, ItemStudy]:
     """Each item's study state, for the items of the roadmap that have a lesson."""
     cursor = await connection.execute(
@@ -155,7 +155,7 @@ async def list_versions(
 
 
 async def get_detail(
-    connection: UserConnection, user_id: UUID, item_id: UUID, lesson_id: UUID | None
+    connection: ReadConnection, user_id: UUID, item_id: UUID, lesson_id: UUID | None
 ) -> LessonDetail | None:
     """A topic's lesson with its content: the one asked for, or else the current version."""
     if lesson_id is None:
@@ -200,7 +200,7 @@ _EXCERPT_CHARS = 400
 
 
 async def resolve_citations(
-    connection: UserConnection, user_id: UUID, references: Sequence[SourceReference]
+    connection: ReadConnection, user_id: UUID, references: Sequence[SourceReference]
 ) -> list[Citation]:
     """Look up the passages a lesson cites; one that no longer exists is marked unavailable."""
     if not references:

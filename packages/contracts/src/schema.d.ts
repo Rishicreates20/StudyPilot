@@ -161,6 +161,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exports/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One export with its status and newest job */
+        get: operations["get_export_v1_exports__export_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete an export and its file */
+        delete: operations["delete_export_v1_exports__export_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exports/{export_id}/download-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A short-lived signed link to download a ready export
+         * @description The link works for a couple of minutes and only for this one file. A POST, so it is never
+         *     cached or prefetched. `url` is null on servers that keep files on their own disk; use
+         *     `GET /v1/exports/{id}/file` there.
+         */
+        post: operations["create_download_link_v1_exports__export_id__download_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exports/{export_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a ready export through the API
+         * @description Always an attachment, never displayed in the browser.
+         */
+        get: operations["download_file_v1_exports__export_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/goals": {
         parameters: {
             query?: never;
@@ -215,7 +275,7 @@ export interface paths {
         post?: never;
         /**
          * Permanently delete an archived goal
-         * @description Also removes the goal's uploaded files from storage (its rows cascade).
+         * @description Also removes the goal's uploaded and exported files from storage (its rows cascade).
          */
         delete: operations["delete_goal_v1_goals__goal_id__delete"];
         options?: never;
@@ -281,6 +341,23 @@ export interface paths {
          *     matched well enough: the material doesn't cover the question.
          */
         post: operations["search_documents_v1_goals__goal_id__documents_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A goal's exported files, newest first, each with its status */
+        get: operations["list_exports_v1_goals__goal_id__exports_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -419,6 +496,28 @@ export interface paths {
          * @description Queues a new job that repeats the failed one; the failed job stays as history.
          */
         post: operations["retry_job_v1_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lessons/{lesson_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export a lesson as PDF notes, a PDF revision sheet or PowerPoint slides
+         * @description Queues a background job and returns the export at once (202); follow `GET /v1/exports/{id}`.
+         *     Asking again for the same lesson and format returns the same export (200) without a new job,
+         *     unless the last attempt failed.
+         */
+        post: operations["export_lesson_v1_lessons__lesson_id__exports_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -684,6 +783,23 @@ export interface paths {
         get: operations["read_roadmap_v1_roadmaps__roadmap_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/roadmaps/{roadmap_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export a roadmap version as a PDF plan or PowerPoint slides */
+        post: operations["export_roadmap_v1_roadmaps__roadmap_id__exports_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1093,6 +1209,72 @@ export interface components {
             /** Page */
             page?: number | null;
         };
+        /**
+         * DownloadLink
+         * @description Where to fetch the file. ``url`` is a signed link valid until ``expires_at``; it is null
+         *     when the server keeps files on its own disk (development), and the file is then served by
+         *     ``GET /v1/exports/{id}/file``.
+         */
+        DownloadLink: {
+            /** Expires At */
+            expires_at: string | null;
+            /** File Name */
+            file_name: string;
+            /** Url */
+            url: string | null;
+        };
+        /** Export */
+        Export: {
+            /** Content Type */
+            content_type: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** File Name */
+            file_name: string | null;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "notes_pdf" | "revision_pdf" | "roadmap_pdf" | "slides_pptx";
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            job: components["schemas"]["GenerationJob"] | null;
+            /** Lesson Id */
+            lesson_id: string | null;
+            /** Page Count */
+            page_count: number | null;
+            /** Ready At */
+            ready_at: string | null;
+            /** Roadmap Id */
+            roadmap_id: string | null;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "processing" | "failed" | "not_started";
+            /** Template Version */
+            template_version: string;
+            /** Unsupported Characters */
+            unsupported_characters: number | null;
+        };
+        /** ExportList */
+        ExportList: {
+            /** Items */
+            items: components["schemas"]["Export"][];
+        };
         /** FieldError */
         FieldError: {
             /** Code */
@@ -1121,6 +1303,8 @@ export interface components {
             error_code: string | null;
             /** Error Message */
             error_message: string | null;
+            /** Export Id */
+            export_id?: string | null;
             /** Finished At */
             finished_at: string | null;
             /**
@@ -1139,7 +1323,7 @@ export interface components {
              * Job Type
              * @enum {string}
              */
-            job_type: "roadmap" | "lesson" | "quiz" | "grade" | "document";
+            job_type: "roadmap" | "lesson" | "quiz" | "grade" | "document" | "export" | "resources";
             /** Lesson Id */
             lesson_id: string | null;
             /** Max Attempts */
@@ -1427,6 +1611,15 @@ export interface components {
             title: string;
             /** Version */
             version: number;
+        };
+        /** LessonExportRequest */
+        LessonExportRequest: {
+            /**
+             * Format
+             * @description `notes_pdf` (the whole lesson), `revision_pdf` (a one-to-two page sheet) or `slides_pptx` (a PowerPoint deck).
+             * @enum {string}
+             */
+            format: "notes_pdf" | "revision_pdf" | "slides_pptx";
         };
         /**
          * LessonRequest
@@ -2030,6 +2223,15 @@ export interface components {
             unknowns: string[];
             /** Version */
             version: number;
+        };
+        /** RoadmapExportRequest */
+        RoadmapExportRequest: {
+            /**
+             * Format
+             * @description `roadmap_pdf` (the plan with its schedule) or `slides_pptx`.
+             * @enum {string}
+             */
+            format: "roadmap_pdf" | "slides_pptx";
         };
         /**
          * RoadmapItem
@@ -2968,6 +3170,264 @@ export interface operations {
             };
         };
     };
+    get_export_v1_exports__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Export"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    delete_export_v1_exports__export_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description File storage is unavailable or not set up */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_download_link_v1_exports__export_id__download_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadLink"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description File storage is unavailable or not set up */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    download_file_v1_exports__export_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file, as an attachment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": unknown;
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description File storage is unavailable or not set up */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     list_goals_v1_goals_get: {
         parameters: {
             query?: {
@@ -3634,6 +4094,64 @@ export interface operations {
             };
         };
     };
+    list_exports_v1_goals__goal_id__exports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     list_goal_jobs_v1_goals__goal_id__jobs_get: {
         parameters: {
             query?: {
@@ -4137,6 +4655,95 @@ export interface operations {
                 };
             };
             /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_lesson_v1_lessons__lesson_id__exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lesson_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LessonExportRequest"];
+            };
+        };
+        responses: {
+            /** @description The export already exists: ready, or being made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Export"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Export"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Today's export allowance is used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage is unavailable or not set up */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -5073,6 +5680,95 @@ export interface operations {
                 };
             };
             /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_roadmap_v1_roadmaps__roadmap_id__exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roadmap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoadmapExportRequest"];
+            };
+        };
+        responses: {
+            /** @description The export already exists: ready, or being made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Export"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Export"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Today's export allowance is used up */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description File storage is unavailable or not set up */
             503: {
                 headers: {
                     [name: string]: unknown;
