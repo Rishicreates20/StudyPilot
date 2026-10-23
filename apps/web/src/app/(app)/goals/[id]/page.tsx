@@ -10,6 +10,10 @@ import {
   DocumentsSection,
   DocumentsSectionSkeleton,
 } from "@/components/documents/documents-section";
+import {
+  FlashcardsSection,
+  FlashcardsSectionSkeleton,
+} from "@/components/flashcards/flashcards-section";
 import { GoalActions } from "@/components/goals/goal-actions";
 import { GoalDetails } from "@/components/goals/goal-details";
 import { GoalStatusBadge } from "@/components/goals/goal-status-badge";
@@ -112,6 +116,10 @@ async function GoalContent({ params, searchParams }: GoalPageProps) {
 
       <Suspense fallback={<ProgressSectionSkeleton />}>
         <ProgressSection goalId={goal.id} goalStatus={goal.status} />
+      </Suspense>
+
+      <Suspense fallback={<FlashcardsSectionSkeleton />}>
+        <FlashcardsSection goalId={goal.id} goalStatus={goal.status} />
       </Suspense>
     </div>
   );
