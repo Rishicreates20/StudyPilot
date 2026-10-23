@@ -16,6 +16,9 @@ const USER_SAFE_CODES: ReadonlySet<string> = new Set([
   "FILE_EMPTY",
   "STORAGE_NOT_CONFIGURED",
   "AI_NOT_CONFIGURED",
+  // Flashcards: written for the learner, they never contain what a card says.
+  "FLASHCARD_LIMIT_REACHED",
+  "UNKNOWN_TOPIC",
 ]);
 
 /**

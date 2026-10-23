@@ -73,6 +73,21 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Daily roadmap limit reached",
     message: "You have used today's roadmap generations. Please try again tomorrow.",
   },
+  "card-deleted": {
+    variant: "success",
+    title: "Card deleted",
+    message: "Its history went with it.",
+  },
+  "card-failed": {
+    variant: "warning",
+    title: "We couldn't change that card",
+    message: "Nothing was changed. Please try again.",
+  },
+  "review-failed": {
+    variant: "warning",
+    title: "That review wasn't saved",
+    message: "The card is still due. Please try again.",
+  },
   "goal-archived": {
     variant: "warning",
     title: "Restore the goal first",
