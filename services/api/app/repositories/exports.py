@@ -15,8 +15,16 @@ from app.core.db import UserConnection
 from app.exports.model import ExportFormat
 
 _COLUMNS = (
-    "id, goal_id, lesson_id, roadmap_id, format, template_version, storage_path, file_name,"
-    " content_type, size_bytes, page_count, unsupported_characters, ready_at, created_at"
+    "e.id, e.goal_id, e.lesson_id, e.roadmap_id, e.format, e.template_version, e.storage_path,"
+    " e.file_name, e.content_type, e.size_bytes, e.page_count, e.unsupported_characters,"
+    " e.ready_at, e.created_at, coalesce(l.title, r.title, '') as source_title,"
+    " coalesce(l.version, r.version, 0) as source_version"
+)
+# The source's title and version, for showing which lesson or roadmap a file was made from.
+_FROM = (
+    " from public.exports e"
+    " left join public.lessons l on l.id = e.lesson_id and l.user_id = e.user_id"
+    " left join public.roadmaps r on r.id = e.roadmap_id and r.user_id = e.user_id"
 )
 
 
@@ -36,6 +44,8 @@ class ExportRow:
     unsupported_characters: int | None
     ready_at: datetime | None
     created_at: datetime
+    source_title: str
+    source_version: int
 
 
 def _row(row: dict[str, object]) -> ExportRow:
@@ -53,10 +63,11 @@ async def find_for_source(
 ) -> ExportRow | None:
     """The one export of this source, format and template version, if it exists."""
     cursor = await connection.execute(
-        f"select {_COLUMNS} from public.exports"  # noqa: S608 - _COLUMNS is a module constant
-        " where user_id = %(user)s and format = %(format)s and template_version = %(template)s"
-        " and lesson_id is not distinct from %(lesson)s"
-        " and roadmap_id is not distinct from %(roadmap)s",
+        f"select {_COLUMNS}{_FROM}"  # noqa: S608 - module constants
+        " where e.user_id = %(user)s and e.format = %(format)s"
+        " and e.template_version = %(template)s"
+        " and e.lesson_id is not distinct from %(lesson)s"
+        " and e.roadmap_id is not distinct from %(roadmap)s",
         {
             "user": user_id,
             "format": export_format,
@@ -110,9 +121,9 @@ async def insert(
 async def get(
     connection: UserConnection, user_id: UUID, export_id: UUID, *, for_update: bool = False
 ) -> ExportRow | None:
-    lock = " for update" if for_update else ""
+    lock = " for update of e" if for_update else ""
     cursor = await connection.execute(
-        f"select {_COLUMNS} from public.exports where id = %s and user_id = %s{lock}",  # noqa: S608
+        f"select {_COLUMNS}{_FROM} where e.id = %s and e.user_id = %s{lock}",  # noqa: S608
         (export_id, user_id),
     )
     row = await cursor.fetchone()
@@ -123,8 +134,8 @@ async def list_for_goal(
     connection: UserConnection, user_id: UUID, goal_id: UUID
 ) -> list[ExportRow]:
     cursor = await connection.execute(
-        f"select {_COLUMNS} from public.exports"  # noqa: S608
-        " where user_id = %s and goal_id = %s order by created_at desc, id desc",
+        f"select {_COLUMNS}{_FROM}"  # noqa: S608
+        " where e.user_id = %s and e.goal_id = %s order by e.created_at desc, e.id desc",
         (user_id, goal_id),
     )
     return [_row(row) for row in await cursor.fetchall()]

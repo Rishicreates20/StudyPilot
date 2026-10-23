@@ -1232,6 +1232,14 @@
             ],
             "title": "Size Bytes"
           },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "source_version": {
+            "title": "Source Version",
+            "type": "integer"
+          },
           "status": {
             "enum": [
               "ready",
@@ -1263,6 +1271,8 @@
           "goal_id",
           "lesson_id",
           "roadmap_id",
+          "source_title",
+          "source_version",
           "format",
           "template_version",
           "status",

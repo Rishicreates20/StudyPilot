@@ -396,6 +396,13 @@ export function fetchGoalProgress(accessToken: string, goalId: string): Promise<
 }
 
 export type StudyDocument = components["schemas"]["Document"];
+export type Export = components["schemas"]["Export"];
+export type ExportList = components["schemas"]["ExportList"];
+export type ExportFormat = Export["format"];
+export type ExportStatus = Export["status"];
+export type LessonExportFormat = components["schemas"]["LessonExportRequest"]["format"];
+export type RoadmapExportFormat = components["schemas"]["RoadmapExportRequest"]["format"];
+export type DownloadLink = components["schemas"]["DownloadLink"];
 export type DocumentList = components["schemas"]["DocumentList"];
 export type DocumentPages = components["schemas"]["DocumentPages"];
 export type DocumentPage = components["schemas"]["DocumentPage"];
@@ -551,6 +558,76 @@ export function searchDocuments(
 /** The original file, as the API streams it (always an attachment). */
 export async function downloadDocument(accessToken: string, documentId: string): Promise<Response> {
   const url = new URL(`/v1/documents/${documentId}/file`, getServerEnv().API_INTERNAL_BASE_URL);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ApiError(0, "API_UNREACHABLE", "The service is unreachable right now.");
+  }
+  if (!response.ok) throw toApiError(response, await response.json().catch(() => undefined));
+  return response;
+}
+
+// --- Exports (PDF notes, revision sheets, roadmaps, slides) ------------------------------------
+
+export function requestLessonExport(
+  accessToken: string,
+  lessonId: string,
+  format: LessonExportFormat,
+): Promise<Export> {
+  return call(() =>
+    client(accessToken).POST("/v1/lessons/{lesson_id}/exports", {
+      params: { path: { lesson_id: lessonId } },
+      body: { format },
+    }),
+  );
+}
+
+export function requestRoadmapExport(
+  accessToken: string,
+  roadmapId: string,
+  format: RoadmapExportFormat,
+): Promise<Export> {
+  return call(() =>
+    client(accessToken).POST("/v1/roadmaps/{roadmap_id}/exports", {
+      params: { path: { roadmap_id: roadmapId } },
+      body: { format },
+    }),
+  );
+}
+
+export function fetchExports(accessToken: string, goalId: string): Promise<ExportList> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/exports", {
+      params: { path: { goal_id: goalId } },
+    }),
+  );
+}
+
+/** A short-lived signed link to a ready export (null `url` when the API serves files itself). */
+export function createDownloadLink(accessToken: string, exportId: string): Promise<DownloadLink> {
+  return call(() =>
+    client(accessToken).POST("/v1/exports/{export_id}/download-link", {
+      params: { path: { export_id: exportId } },
+    }),
+  );
+}
+
+export function deleteExport(accessToken: string, exportId: string): Promise<void> {
+  return callWithoutBody(() =>
+    client(accessToken).DELETE("/v1/exports/{export_id}", {
+      params: { path: { export_id: exportId } },
+    }),
+  );
+}
+
+/** The bytes of a ready export, through the API (used when there is no signed link). */
+export async function downloadExportFile(accessToken: string, exportId: string): Promise<Response> {
+  const url = new URL(`/v1/exports/${exportId}/file`, getServerEnv().API_INTERNAL_BASE_URL);
   let response: Response;
   try {
     response = await fetch(url, {

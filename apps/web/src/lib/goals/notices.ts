@@ -210,6 +210,37 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Archive the goal first",
     message: "Only archived goals can be deleted permanently.",
   },
+  "export-requested": {
+    variant: "success",
+    title: "Your file is being made",
+    message: "It usually takes a few seconds. It will appear below, ready to download.",
+  },
+  "export-ready": {
+    variant: "info",
+    title: "That file is already made",
+    message: "It is shown below, ready to download.",
+  },
+  "export-busy": {
+    variant: "info",
+    title: "That file is still being made",
+    message: "Wait for it to finish, then try again.",
+  },
+  "export-deleted": { variant: "info", title: "File deleted" },
+  "export-limit-today": {
+    variant: "warning",
+    title: "Daily export limit reached",
+    message: "You have made today's exports. Please try again tomorrow.",
+  },
+  "export-goal-archived": {
+    variant: "warning",
+    title: "Restore the goal first",
+    message: "An archived goal is read-only, so its lessons and roadmaps can't be exported.",
+  },
+  "export-not-ready": {
+    variant: "info",
+    title: "That file isn't ready yet",
+    message: "It will appear below as soon as it is made.",
+  },
   unavailable: {
     variant: "warning",
     title: "We couldn't do that just now",

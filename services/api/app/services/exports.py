@@ -78,6 +78,8 @@ def _to_schema(row: ExportRow, job: GenerationJob | None) -> Export:
         goal_id=row.goal_id,
         lesson_id=row.lesson_id,
         roadmap_id=row.roadmap_id,
+        source_title=row.source_title,
+        source_version=row.source_version,
         format=row.format,
         template_version=row.template_version,
         status=_status(row, job),

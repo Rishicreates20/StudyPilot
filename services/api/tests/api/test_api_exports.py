@@ -115,6 +115,7 @@ def test_a_learner_requests_follows_and_downloads_an_export(
     assert export["job"]["job_type"] == "export" and export["job"]["export_id"] == export["id"]
     assert export["goal_id"] == owned["goal"]
     assert export["file_name"] is None
+    assert export["source_title"] and export["source_version"] >= 1  # what the file is made from
 
     make(database_dsn, store)
 

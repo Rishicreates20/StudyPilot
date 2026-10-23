@@ -1,4 +1,4 @@
-import { ArchiveIcon, ArrowLeftIcon } from "lucide-react";
+import { ArchiveIcon, ArrowLeftIcon, FolderDownIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { callApi } from "@/lib/api/call";
 import { fetchGoal, fetchMe } from "@/lib/api/server";
 import { DASHBOARD_PATH } from "@/lib/auth/paths";
+import { exportsPath } from "@/lib/exports/paths";
 import { daysBetween, todayIn } from "@/lib/format";
 import { goalPath, isGoalId } from "@/lib/goals/ids";
 import { goalTypeLabel } from "@/lib/goals/options";
@@ -109,6 +110,17 @@ async function GoalContent({ params, searchParams }: GoalPageProps) {
       <Suspense fallback={<RoadmapSectionSkeleton />}>
         <RoadmapSection goalId={goal.id} goalStatus={goal.status} timeZone={me.timezone} />
       </Suspense>
+
+      <p className="text-sm text-muted-foreground">
+        <Link
+          href={exportsPath(goal.id)}
+          className="inline-flex items-center gap-1.5 rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <FolderDownIcon className="size-4" aria-hidden="true" />
+          Exported files
+        </Link>{" "}
+        - PDF notes, revision sheets, roadmaps and slides you have downloaded from this goal.
+      </p>
 
       <Suspense fallback={<ProgressSectionSkeleton />}>
         <ProgressSection goalId={goal.id} goalStatus={goal.status} />

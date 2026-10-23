@@ -44,6 +44,9 @@ class Export(BaseModel):
     # Exactly one of these names the source.
     lesson_id: UUID | None
     roadmap_id: UUID | None
+    # The title and version of the lesson or roadmap the file is made from.
+    source_title: str
+    source_version: int
     format: ExportFormat
     template_version: str
     status: ExportStatus

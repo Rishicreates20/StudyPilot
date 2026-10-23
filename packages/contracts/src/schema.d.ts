@@ -1260,6 +1260,10 @@ export interface components {
             roadmap_id: string | null;
             /** Size Bytes */
             size_bytes: number | null;
+            /** Source Title */
+            source_title: string;
+            /** Source Version */
+            source_version: number;
             /**
              * Status
              * @enum {string}
