@@ -576,3 +576,82 @@ export async function downloadDocument(accessToken: string, documentId: string):
   if (!response.ok) throw toApiError(response, await response.json().catch(() => undefined));
   return response;
 }
+
+// --- Flashcards -------------------------------------------------------------------------------------
+
+export type Flashcard = components["schemas"]["Flashcard"];
+export type FlashcardList = components["schemas"]["FlashcardList"];
+export type FlashcardDueQueue = components["schemas"]["FlashcardDueQueue"];
+export type FlashcardSummary = components["schemas"]["FlashcardSummary"];
+export type FlashcardReviewResult = components["schemas"]["FlashcardReviewResult"];
+export type FlashcardRating = components["schemas"]["FlashcardReviewRequest"]["rating"];
+export type FlashcardInput = components["schemas"]["FlashcardCreate"];
+export type FlashcardEdit = components["schemas"]["FlashcardUpdate"];
+
+export function fetchFlashcards(accessToken: string, goalId: string): Promise<FlashcardList> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/flashcards", {
+      params: { path: { goal_id: goalId } },
+    }),
+  );
+}
+
+export function fetchDueFlashcards(
+  accessToken: string,
+  goalId: string,
+  limit = 20,
+): Promise<FlashcardDueQueue> {
+  return call(() =>
+    client(accessToken).GET("/v1/goals/{goal_id}/flashcards/due", {
+      params: { path: { goal_id: goalId }, query: { limit } },
+    }),
+  );
+}
+
+export function createFlashcard(
+  accessToken: string,
+  goalId: string,
+  body: FlashcardInput,
+): Promise<Flashcard> {
+  return call(() =>
+    client(accessToken).POST("/v1/goals/{goal_id}/flashcards", {
+      params: { path: { goal_id: goalId } },
+      body,
+    }),
+  );
+}
+
+export function updateFlashcard(
+  accessToken: string,
+  cardId: string,
+  body: FlashcardEdit,
+): Promise<Flashcard> {
+  return call(() =>
+    client(accessToken).PATCH("/v1/flashcards/{card_id}", {
+      params: { path: { card_id: cardId } },
+      body,
+    }),
+  );
+}
+
+export function deleteFlashcard(accessToken: string, cardId: string): Promise<void> {
+  return callWithoutBody(() =>
+    client(accessToken).DELETE("/v1/flashcards/{card_id}", {
+      params: { path: { card_id: cardId } },
+    }),
+  );
+}
+
+export function reviewFlashcard(
+  accessToken: string,
+  cardId: string,
+  rating: FlashcardRating,
+  idempotencyKey: string,
+): Promise<FlashcardReviewResult> {
+  return call(() =>
+    client(accessToken).POST("/v1/flashcards/{card_id}/reviews", {
+      params: { path: { card_id: cardId }, header: { "Idempotency-Key": idempotencyKey } },
+      body: { rating },
+    }),
+  );
+}
