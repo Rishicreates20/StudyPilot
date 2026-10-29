@@ -99,7 +99,7 @@ Each requirement has an ID so milestones, tests and commits can reference it.
 | **FR-17 Analytics** | Mastery by topic, revision due dates, study consistency, suggested next actions. |
 | **FR-18 Report a problem** | Learners can flag an incorrect lesson, question or resource. |
 
-**Implementation status for FR-13 (2026-10-12):** a lesson-level browser-local prototype supports card creation/editing, due reviews and deterministic `simple-v1` history. It does not yet satisfy account persistence, cross-device continuity or adaptive revision from assessments/mastery/target dates. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase review and remaining work.
+**Implementation status for FR-13 (corrected 2026-10-23):** **not implemented on `main`.** An earlier note here described a browser-local flashcard prototype; no such code exists in the repository or its history (checked 2026-10-23: no flashcard component, route or `simple-v1` scheduler anywhere), so that note was wrong. Account-owned cards with an append-only review history are being built on the branch `feat/m7-flashcards` (database slice pushed; API and UI in progress) and are not part of `main` until merged. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ### P2
 

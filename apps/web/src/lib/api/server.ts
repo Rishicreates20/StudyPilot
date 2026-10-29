@@ -73,21 +73,33 @@ export class ApiError extends Error {
   }
 }
 
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+/**
+ * An ApiError from whatever came back. The body is NOT trusted to be a problem document: a proxy,
+ * a gateway or a misbehaving server can answer with any JSON, so only well-typed values are used
+ * and everything else falls back to generic wording (never a crash, never an object as text).
+ */
 function toApiError(response: Response, body: unknown): ApiError {
-  const problem = (typeof body === "object" && body !== null ? body : {}) as Partial<ProblemDetail>;
+  const problem: Partial<Record<keyof ProblemDetail, unknown>> =
+    typeof body === "object" && body !== null && !Array.isArray(body) ? body : {};
   const fieldErrors: Record<string, string> = {};
-  for (const error of problem.errors ?? []) {
+  for (const error of Array.isArray(problem.errors) ? (problem.errors as unknown[]) : []) {
+    if (typeof error !== "object" || error === null) continue;
+    const { field, message } = error as Record<string, unknown>;
+    if (typeof field !== "string" || typeof message !== "string") continue;
     // "body.title" -> "title", "body.languages.0" -> "languages": a form shows an error on the
     // list item against its field. Keep the first message per field.
-    const field = error.field.replace(/^(body|query|path)\./, "").split(".")[0] ?? "";
-    fieldErrors[field] ??= error.message;
+    const name = field.replace(/^(body|query|path)\./, "").split(".")[0] ?? "";
+    fieldErrors[name] ??= message;
   }
   return new ApiError(
     response.status,
-    problem.code ?? `HTTP_${response.status}`,
-    problem.detail ?? "Request failed.",
+    textOf(problem.code) ?? `HTTP_${response.status}`,
+    textOf(problem.detail) ?? "Request failed.",
     {
-      requestId: problem.request_id ?? response.headers.get("x-request-id") ?? undefined,
+      requestId: textOf(problem.request_id) ?? response.headers.get("x-request-id") ?? undefined,
       fieldErrors,
     },
   );
