@@ -273,17 +273,18 @@ async def get_current_id(connection: UserConnection, user_id: UUID, item_id: UUI
 
 @dataclass(frozen=True)
 class LessonRef:
-    """What saving progress needs to know about a lesson."""
+    """What saving progress (and exporting) needs to know about a lesson."""
 
     id: UUID
     item_id: UUID
     section_ids: list[str]
+    goal_id: UUID
     goal_status: str
 
 
 async def get_ref(connection: UserConnection, user_id: UUID, lesson_id: UUID) -> LessonRef | None:
     cursor = await connection.execute(
-        "select l.id, l.item_id, l.section_ids, g.status as goal_status"
+        "select l.id, l.item_id, l.section_ids, g.id as goal_id, g.status as goal_status"
         " from public.lessons l"
         " join public.roadmaps r on r.id = l.roadmap_id and r.user_id = l.user_id"
         " join public.learning_goals g on g.id = r.goal_id and g.user_id = r.user_id"
@@ -297,6 +298,7 @@ async def get_ref(connection: UserConnection, user_id: UUID, lesson_id: UUID) ->
         id=row["id"],
         item_id=row["item_id"],
         section_ids=list(row["section_ids"]),
+        goal_id=row["goal_id"],
         goal_status=row["goal_status"],
     )
 

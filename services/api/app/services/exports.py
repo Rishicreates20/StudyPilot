@@ -120,6 +120,7 @@ async def request_lesson_export(
         token,
         files=files,
         settings=settings,
+        goal_id=ref.goal_id,
         lesson_id=lesson_id,
         roadmap_id=None,
         export_format=export_format,
@@ -152,10 +153,36 @@ async def request_roadmap_export(
         token,
         files=files,
         settings=settings,
+        goal_id=summary.goal_id,
         lesson_id=None,
         roadmap_id=roadmap_id,
         export_format=export_format,
     )
+
+
+async def _lock_open_goal(
+    connection: UserConnection, user_id: UUID, goal_id: UUID, *, lesson: bool
+) -> None:
+    """Lock the goal until the transaction ends and refuse an archived one, as lessons and quizzes
+    do: a goal archived while an export is being asked for cannot still get a job."""
+    goal = await goals_repo.get(connection, user_id, goal_id, for_update=True)
+    if goal is None:
+        if lesson:
+            raise NotFoundError("Lesson not found.", code="LESSON_NOT_FOUND")
+        raise NotFoundError("Roadmap not found.", code="ROADMAP_NOT_FOUND")
+    if goal.status == "archived":
+        raise _archived()
+
+
+async def _check_allowance(connection: UserConnection, user_id: UUID, settings: Settings) -> None:
+    since = datetime.now(UTC) - _ALLOWANCE_WINDOW
+    used = await jobs_repo.count_since(connection, user_id, since, job_type="export")
+    if used >= settings.export_jobs_per_user_per_day:
+        raise RateLimitedError(
+            f"You can make up to {settings.export_jobs_per_user_per_day} exports a day. "
+            "Please try again tomorrow.",
+            code="EXPORT_ALLOWANCE_USED",
+        )
 
 
 async def _request(
@@ -165,13 +192,16 @@ async def _request(
     *,
     files: ExportFiles | None,
     settings: Settings,
+    goal_id: UUID,
     lesson_id: UUID | None,
     roadmap_id: UUID | None,
     export_format: ExportFormat,
 ) -> tuple[Export, bool]:
     user_id = principal.user_id
+    lesson = lesson_id is not None
     # 1. Find or create the export; a ready or busy one is returned as it is.
     async with database.user_transaction(principal) as connection:
+        await _lock_open_goal(connection, user_id, goal_id, lesson=lesson)
         row = await exports_repo.find_for_source(
             connection,
             user_id,
@@ -185,14 +215,7 @@ async def _request(
             if row.ready_at is not None or (job is not None and job.status in _ACTIVE):
                 return _to_schema(row, job), False
         store = _require_files(files)
-        since = datetime.now(UTC) - _ALLOWANCE_WINDOW
-        used = await jobs_repo.count_since(connection, user_id, since, job_type="export")
-        if used >= settings.export_jobs_per_user_per_day:
-            raise RateLimitedError(
-                f"You can make up to {settings.export_jobs_per_user_per_day} exports a day. "
-                "Please try again tomorrow.",
-                code="EXPORT_ALLOWANCE_USED",
-            )
+        await _check_allowance(connection, user_id, settings)
         if row is None:
             row = await exports_repo.insert(
                 connection,
@@ -210,9 +233,13 @@ async def _request(
     except StorageError as problem:
         raise storage_error(problem) from None
 
-    # 3. Hand it over and queue the job. A concurrent request that queued one first wins.
+    # 3. Hand it over and queue the job. A concurrent request that queued one first wins. The goal
+    #    is locked and checked again: it may have been archived, or the allowance used up by
+    #    another request, while the link was being made.
     try:
         async with database.user_transaction(principal) as connection:
+            await _lock_open_goal(connection, user_id, goal_id, lesson=lesson)
+            await _check_allowance(connection, user_id, settings)
             if not await exports_repo.set_upload_grant(connection, user_id, row.id, grant):
                 # It became ready in the meantime (another request's job finished).
                 fresh = await exports_repo.get(connection, user_id, row.id)
@@ -366,10 +393,18 @@ async def purge_goal_exports(
 ) -> None:
     """Delete the stored export files of a goal that is about to be deleted (the rows cascade).
 
-    Called after ``documents.purge_goal_files``, which has already checked that the goal exists,
-    belongs to the caller and is archived.
+    Runs before ``documents.purge_goal_files`` (exported files can be made again, uploaded ones
+    cannot), so it makes the same checks: only an archived goal of the caller's, and nothing is
+    removed for any other goal.
     """
     async with database.user_transaction(principal) as connection:
+        goal = await goals_repo.get(connection, principal.user_id, goal_id)
+        if goal is None:
+            raise NotFoundError("Goal not found.", code="GOAL_NOT_FOUND")
+        if goal.status != "archived":
+            raise ConflictError(
+                "Archive this goal before deleting it permanently.", code="GOAL_NOT_ARCHIVED"
+            )
         paths = await exports_repo.storage_paths_for_goal(connection, principal.user_id, goal_id)
     if not paths:
         return

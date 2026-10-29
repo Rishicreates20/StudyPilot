@@ -110,8 +110,20 @@ def _chunked(
     return slides
 
 
+def code_text(code: str) -> str:
+    """Code with its line breaks and indentation, without other control or format characters.
+
+    python-pptx would not fail on them, but it writes them out as visible ``_x0001_`` text."""
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFC", code.replace("\r\n", "\n"))
+        if char in "\n\t‌‍" or unicodedata.category(char) not in {"Cc", "Cf", "Cs", "Co"}
+    )
+
+
 def _code_slide(title: str, block: CodeBlock) -> Slide:
-    lines = block.code.expandtabs(4).rstrip("\n").splitlines()
+    code = code_text(block.code)
+    lines = code.expandtabs(4).rstrip("\n").splitlines()
     shortened = len(lines) > MAX_CODE_LINES or any(len(line) > MAX_CODE_COLUMNS for line in lines)
     shown = [
         line if len(line) <= MAX_CODE_COLUMNS else line[: MAX_CODE_COLUMNS - 1] + "…"
@@ -125,7 +137,7 @@ def _code_slide(title: str, block: CodeBlock) -> Slide:
         title=f"{title}: example",
         code="\n".join(shown),
         caption=caption,
-        notes=block.code if shortened else None,
+        notes=code if shortened else None,
     )
 
 
@@ -154,6 +166,8 @@ def lesson_outline(source: LessonSource) -> list[Slide]:
                 notes.append(plain(block.text))
             elif isinstance(block, ListBlock):
                 points.extend(shorten(item, 120) for item in block.items)
+                # A point may be cut short on the slide; the notes keep every item in full.
+                notes.append("\n".join(f"- {plain(item)}" for item in block.items))
             elif isinstance(block, CalloutBlock):
                 label = block.title or _CALLOUT_LABELS.get(block.kind, "Note")
                 points.append(f"{plain(label)}: {first_sentence(block.text, 120)}")
@@ -243,10 +257,16 @@ def roadmap_outline(source: RoadmapSource) -> list[Slide]:
             )
             for t in module.topics
         ]
+        # The slide lists the topics; the notes say what each one is and what to practise.
+        topic_notes = [
+            f"{plain(t.title)}: {plain(t.description)}"
+            + (f"\nPractice: {plain(t.practice_task)}" if t.practice_task else "")
+            for t in module.topics
+        ]
         slides += _chunked(
             f"Module {module.position}: {plain(module.title)}",
             points,
-            notes=plain(module.summary),
+            notes="\n\n".join([plain(module.summary), *topic_notes]),
             size=6,
         )
     slides += _chunked(

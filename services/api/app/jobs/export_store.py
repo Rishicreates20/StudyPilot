@@ -13,6 +13,8 @@ from uuid import UUID
 
 from app.core.db import SystemConnection
 from app.exports.model import ExportFormat, LessonSource, RenderedFile, RoadmapSource
+from app.jobs.errors import JobCancelled, LeaseLost
+from app.jobs.queue import Job
 from app.repositories import lessons as lessons_repo
 from app.repositories import roadmaps as roadmaps_repo
 
@@ -68,6 +70,23 @@ async def roadmap_source(
 ) -> RoadmapSource | None:
     roadmap = await roadmaps_repo.get_detail(connection, user_id, roadmap_id)
     return RoadmapSource(roadmap=roadmap, goal_title=goal_title) if roadmap else None
+
+
+async def hold_job(connection: SystemConnection, job: Job, worker_id: str) -> None:
+    """Lock the job row and confirm this worker still owns it and nobody cancelled it.
+
+    The lease only notices a cancel at its next heartbeat, so the transaction that finishes the
+    job checks again: a cancel that landed while the file was being made wins."""
+    cursor = await connection.execute(
+        "select cancel_requested from public.generation_jobs"
+        " where id = %s and locked_by = %s and status = 'running' for update",
+        (job.id, worker_id),
+    )
+    owned = await cursor.fetchone()
+    if owned is None:
+        raise LeaseLost
+    if owned["cancel_requested"]:
+        raise JobCancelled
 
 
 async def save_file(

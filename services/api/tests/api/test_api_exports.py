@@ -17,7 +17,7 @@ from httpx2 import Response
 from pptx import Presentation
 from pypdf import PdfReader
 
-from app.documents.storage import StorageError
+from app.documents.storage import LocalFiles, StorageError
 from app.exports.files import LocalExportFiles
 from conftest import Learner
 from support.api_helpers import create_goal, generate_roadmap, set_status, topic_ids
@@ -226,6 +226,45 @@ def test_a_storage_hiccup_is_retried_and_an_expired_link_fails_until_asked_again
     assert [j["status"] for j in export_jobs(database_dsn, export["id"])] == ["failed", "completed"]
 
 
+class CancellingStore(LocalExportFiles):
+    """The learner cancels while the file is being uploaded: after the lease's last look, before
+    the transaction that would record the file."""
+
+    def __init__(self, root: Path, dsn: str) -> None:
+        super().__init__(root)
+        self.dsn = dsn
+
+    async def upload(self, grant: str, data: bytes, content_type: str) -> None:
+        await super().upload(grant, data, content_type)
+        admin(self.dsn).execute(
+            "update public.generation_jobs set cancel_requested = true"
+            " where job_type = 'export' and status = 'running'"
+        )
+
+
+def test_a_cancel_that_lands_while_the_file_is_uploaded_wins(
+    api: TestClient,
+    database_dsn: str,
+    store: LocalExportFiles,
+    owned: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    alice = owned["alice"]
+    clear_queue(database_dsn)
+    export = export_lesson(api, alice, owned["lesson"]).json()
+
+    make(database_dsn, CancellingStore(tmp_path / "exports", database_dsn))
+
+    assert [j["status"] for j in export_jobs(database_dsn, export["id"])] == ["cancelled"]
+    row = admin(database_dsn).fetchone(
+        "select ready_at, upload_token from public.exports where id = %s", (export["id"],)
+    )
+    assert row is not None and row["ready_at"] is None and row["upload_token"] is None
+    assert api.get(f"/v1/exports/{export['id']}", headers=alice.headers).json()["status"] == (
+        "failed"
+    )
+
+
 def test_a_download_link_is_refused_until_the_file_is_ready(
     api: TestClient, database_dsn: str, store: LocalExportFiles, owned: dict[str, Any]
 ) -> None:
@@ -267,6 +306,50 @@ def test_an_archived_goal_cannot_be_exported(
         export_roadmap(api, alice, owned["roadmap"]),
     ):
         assert response.status_code == 409 and response.json()["code"] == "GOAL_ARCHIVED"
+
+
+class ArchivingStore(LocalExportFiles):
+    """Archives the goal while the API is making the upload link: a request from another tab that
+    lands between the API's first check and the transaction that queues the job."""
+
+    def __init__(self, root: Path, dsn: str, goal_id: str) -> None:
+        super().__init__(root)
+        self.dsn = dsn
+        self.goal_id = goal_id
+
+    async def grant_upload(self, path: str, *, token: str) -> str:
+        admin(self.dsn).execute(
+            "update public.learning_goals set status = 'archived' where id = %s", (self.goal_id,)
+        )
+        return await super().grant_upload(path, token=token)
+
+
+@pytest.mark.parametrize("kind", ["lesson", "roadmap"])
+def test_a_goal_archived_while_an_export_is_asked_for_gets_no_job(
+    api: TestClient,
+    api_app: FastAPI,
+    database_dsn: str,
+    owned: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    alice = owned["alice"]
+    clear_queue(database_dsn)
+    store = ArchivingStore(tmp_path / "exports", database_dsn, owned["goal"])
+    monkeypatch.setattr(api_app.state, "export_files", store)
+
+    if kind == "lesson":
+        response = export_lesson(api, alice, owned["lesson"])
+    else:
+        response = export_roadmap(api, alice, owned["roadmap"])
+
+    assert response.status_code == 409 and response.json()["code"] == "GOAL_ARCHIVED"
+    queued = admin(database_dsn).scalar(
+        "select count(*) from public.generation_jobs where job_type = 'export' and goal_id = %s",
+        (owned["goal"],),
+    )
+    assert queued == 0
 
 
 def test_the_daily_allowance_is_enforced(
@@ -375,6 +458,66 @@ def test_deleting_a_goal_removes_its_exported_files(
     set_status(api, alice, owned["goal"], "archived")
     assert api.delete(f"/v1/goals/{owned['goal']}", headers=alice.headers).status_code == 204
     assert not stored.exists()
+
+
+def test_a_live_goal_keeps_its_exported_files_when_deleting_it_is_refused(
+    api: TestClient, database_dsn: str, store: LocalExportFiles, owned: dict[str, Any]
+) -> None:
+    alice = owned["alice"]
+    clear_queue(database_dsn)
+    export = export_lesson(api, alice, owned["lesson"]).json()
+    make(database_dsn, store)
+    path = admin(database_dsn).scalar(
+        "select storage_path from public.exports where id = %s", (export["id"],)
+    )
+    stored = store._file(path)  # pyright: ignore[reportPrivateUsage]
+
+    blocked = api.delete(f"/v1/goals/{owned['goal']}", headers=alice.headers)
+
+    assert blocked.status_code == 409 and blocked.json()["code"] == "GOAL_NOT_ARCHIVED"
+    assert stored.is_file()
+
+
+class UndeletableStore(LocalExportFiles):
+    """Exported files cannot be removed: storage is down."""
+
+    async def delete(self, path: str, *, token: str) -> None:
+        raise StorageError("STORAGE_UNAVAILABLE", "Storage is unavailable.", retryable=True)
+
+
+def test_uploaded_documents_are_kept_when_a_goals_exported_files_cannot_be_removed(
+    api: TestClient,
+    api_app: FastAPI,
+    database_dsn: str,
+    store: LocalExportFiles,
+    owned: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exported files go first: they can be made again, the learner's own documents cannot."""
+    alice, goal = owned["alice"], owned["goal"]
+    clear_queue(database_dsn)
+    export_lesson(api, alice, owned["lesson"])
+    make(database_dsn, store)
+    documents = LocalFiles(tmp_path / "files")
+    monkeypatch.setattr(api_app.state, "files", documents)
+    uploaded = api.post(
+        f"/v1/goals/{goal}/documents",
+        headers={**alice.headers, "Content-Type": "application/octet-stream"},
+        params={"name": "notes.txt"},
+        content=b"Ownership means every value has exactly one owner at a time.",
+    )
+    assert uploaded.status_code == 202
+    root = Path(documents._root)  # pyright: ignore[reportPrivateUsage]
+    assert len(list(root.rglob("*.txt"))) == 1
+
+    monkeypatch.setattr(api_app.state, "export_files", UndeletableStore(tmp_path / "exports"))
+    set_status(api, alice, goal, "archived")
+    response = api.delete(f"/v1/goals/{goal}", headers=alice.headers)
+
+    assert response.status_code == 503 and response.json()["code"] == "STORAGE_UNAVAILABLE"
+    assert len(list(root.rglob("*.txt"))) == 1  # the learner's own file is untouched
+    assert api.get(f"/v1/goals/{goal}", headers=alice.headers).status_code == 200
 
 
 # --- Jobs of a kind this worker cannot run --------------------------------------------------------

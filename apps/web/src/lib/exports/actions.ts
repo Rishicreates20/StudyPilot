@@ -98,6 +98,10 @@ export async function deleteExportAction(goalId: string, exportId: string): Prom
 function safeReturn(returnTo: string, goalId: string): string {
   const prefix = `/goals/${goalId}`;
   const path = safeRedirectPath(returnTo, prefix);
-  const inGoal = (path === prefix || path.startsWith(`${prefix}/`)) && !path.includes("..");
-  return inGoal && !path.includes("?") ? path : prefix;
+  // A query or fragment of its own would swallow the notice added after it.
+  if (path.includes("?") || path.includes("#")) return prefix;
+  // Judge the path as a browser will follow it: `..` and `%2e%2e` segments are resolved first.
+  const resolved = new URL(path, "http://studypilot.invalid").pathname;
+  const inGoal = resolved === prefix || resolved.startsWith(`${prefix}/`);
+  return inGoal ? resolved : prefix;
 }

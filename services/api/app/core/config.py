@@ -143,6 +143,8 @@ class Settings(BaseSettings):
 
     # --- Exports: PDF notes, revision sheets, roadmaps and slides (ADR-049) -------------------
     # Stored in a second private bucket, through the same store as documents (DOCUMENT_STORAGE).
+    # Must name the bucket the exports migration creates: the web download route only follows
+    # signed links into `exports`, so another name fails closed (downloads answer 502).
     export_bucket: str = Field(default="exports", pattern=r"^[a-z0-9][a-z0-9_-]{1,62}$")
     # Only for DOCUMENT_STORAGE=local.
     export_local_dir: str = Field(default=".data/exports", min_length=1, max_length=300)

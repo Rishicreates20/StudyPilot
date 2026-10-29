@@ -40,6 +40,7 @@ async def run_export(env: WorkerEnv, job: Job, lease: Lease) -> None:
             raise JobFailure("EXPORT_MISSING", "This export no longer exists.")
         if task.ready_at is not None:
             # Already made (a job that completed after this one was queued): nothing to do.
+            await export_store.hold_job(connection, job, env.worker_id)
             if not await queue.complete(connection, job.id, env.worker_id):
                 raise LeaseLost
             return
@@ -96,6 +97,8 @@ async def run_export(env: WorkerEnv, job: Job, lease: Lease) -> None:
     await set_stage(env, job, "saving", 90)
     lease.check()
     async with env.database.system_session() as connection:
+        # A cancel that landed while the file was made or uploaded wins: nothing is recorded.
+        await export_store.hold_job(connection, job, env.worker_id)
         saved = await export_store.save_file(
             connection, job.user_id, task.id, storage_path=path, rendered=rendered
         )

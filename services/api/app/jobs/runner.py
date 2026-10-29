@@ -53,6 +53,9 @@ async def process_job(env: WorkerEnv, job: Job) -> None:
         except JobCancelled:
             async with env.database.system_session() as connection:
                 cancelled = await queue.mark_cancelled(connection, job.id, env.worker_id)
+                if cancelled and job.export_id is not None:
+                    # As for a failure: the upload capability goes; asking again makes a fresh one.
+                    await export_store.clear_grant(connection, job.user_id, job.export_id)
                 if cancelled and job.document_id is not None:
                     await document_store.mark_failed(
                         connection,

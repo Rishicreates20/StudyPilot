@@ -17,7 +17,9 @@ from pptx import Presentation
 from pypdf import PdfReader
 
 from app.ai.lesson.schema import Lesson
+from app.exports.lesson_pdf import _checklist, _info  # pyright: ignore[reportPrivateUsage]
 from app.exports.model import PDF_TYPE, PPTX_TYPE, RenderedFile, file_name_for
+from app.exports.pdf_base import BODY_FAMILY, StudyDocument
 from app.exports.render import UnsupportedExport, render
 from app.exports.slides import (
     MAX_CODE_LINES,
@@ -112,6 +114,27 @@ def test_the_revision_sheet_is_short() -> None:
     sheet = render("revision_pdf", lesson_source())
     assert sheet.page_count < notes.page_count
     assert "Check yourself" in pdf_text(sheet)
+
+
+def test_a_checklist_box_never_stays_behind_when_its_text_moves_to_the_next_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pdf = StudyDocument(_info(lesson_source(), "Revision sheet"))  # pyright: ignore[reportPrivateUsage]
+    pdf.add_page()
+    pdf.set_font(BODY_FAMILY, "", 9.5)
+    pdf.set_y(pdf.page_break_trigger - 2)  # less room than one line
+    boxes: list[int] = []
+    draw = pdf.rect
+
+    def rect(*args: Any, **kwargs: Any) -> Any:
+        boxes.append(pdf.page)
+        return draw(*args, **kwargs)
+
+    monkeypatch.setattr(pdf, "rect", rect)
+    _checklist(pdf, ["Explain what ownership means"])  # pyright: ignore[reportPrivateUsage]
+
+    assert pdf.page == 2
+    assert boxes == [2]
 
 
 def test_a_lesson_without_citations_says_it_was_not_based_on_the_learners_documents() -> None:
@@ -267,6 +290,63 @@ def test_code_gets_its_own_slide_and_is_shortened_with_a_note_when_long() -> Non
     assert long_one.code is not None and len(long_one.code.splitlines()) == MAX_CODE_LINES
     assert long_one.caption is not None and "shortened" in long_one.caption
     assert long_one.notes == long_code
+
+
+def test_a_list_item_cut_short_on_a_slide_is_kept_in_full_in_the_notes() -> None:
+    long_item = (
+        "A borrowed reference must never outlive the value it points to, which is exactly what "
+        "the borrow checker proves before the program is allowed to compile and run"
+    )
+    assert len(long_item) > 120
+
+    def edit(data: dict[str, Any]) -> None:
+        data["sections"][0]["blocks"].append(
+            {"type": "list", "ordered": False, "items": [long_item, "Short point"]}
+        )
+
+    source = lesson_source(content=lesson_with(edit))
+    heading = source.lesson.content.sections[0].heading
+    first = next(s for s in lesson_outline(source) if s.title == heading)
+    assert any(point.endswith("…") and point[:-1] in long_item for point in first.points)
+    assert first.notes is not None
+    assert f"- {long_item}" in first.notes and "- Short point" in first.notes
+
+
+def test_roadmap_module_notes_say_what_each_topic_is_and_what_to_practise() -> None:
+    source = roadmap_source()
+    module = source.roadmap.modules[0]
+    slide = next(s for s in roadmap_outline(source) if s.title.startswith("Module 1:"))
+    assert slide.notes is not None and slide.notes.startswith(module.summary)
+    for topic in module.topics:
+        assert f"{topic.title}: {topic.description}" in slide.notes
+    assert "Practice: Write a short program that uses this idea." in slide.notes
+
+
+def test_control_characters_in_code_are_dropped_not_written_out_as_escapes() -> None:
+    code = "fn main() {\n\tlet bell = 1;\x07 // ring\x1b\n}\x00\n" + "\n".join(
+        f"let value_{n} = {n};" for n in range(MAX_CODE_LINES + 4)
+    )
+
+    def edit(data: dict[str, Any]) -> None:
+        data["sections"][0]["blocks"].append(
+            {"type": "code", "language": "rust", "code": code, "caption": "Control characters"}
+        )
+
+    source = lesson_source(content=lesson_with(edit))
+    slide = next(s for s in lesson_outline(source) if s.code and "bell" in s.code)
+    for text in (slide.code, slide.notes):
+        assert text is not None
+        assert not any(char in text for char in "\x00\x07\x1b")
+    assert slide.notes is not None and "\tlet bell = 1; // ring\n}" in slide.notes
+    result = render("slides_pptx", source)
+    with zipfile.ZipFile(io.BytesIO(result.data)) as archive:
+        xml = "".join(
+            archive.read(name).decode("utf-8")
+            for name in archive.namelist()
+            if name.startswith(("ppt/slides/slide", "ppt/notesSlides/"))
+        )
+    assert "_x0007_" not in xml and "_x001B_" not in xml and "_x0000_" not in xml
+    assert "let bell = 1; // ring" in xml
 
 
 def test_slides_name_a_complex_script_font_for_hindi_and_odia() -> None:

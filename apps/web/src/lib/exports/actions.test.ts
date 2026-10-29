@@ -147,13 +147,31 @@ describe("requestLessonExportAction", () => {
     ["another goal", "/goals/22222222-2222-4222-8222-222222222222/roadmap"],
     ["a page outside goals", "/settings"],
     ["a climb out of the goal", `/goals/${GOAL}/../../settings`],
+    ["an encoded climb out of the goal", `/goals/${GOAL}/%2e%2e/%2e%2e/settings`],
+    ["a mixed-case encoded climb", `/goals/${GOAL}/learn/%2E%2e/%2e%2E/settings`],
+    ["a half-encoded climb", `/goals/${GOAL}/.%2e/.%2E/settings`],
+    ["an encoded slash", `/goals/${GOAL}%2F..%2F..%2Fsettings`],
     ["a page with its own query", `/goals/${GOAL}/roadmap?notice=export-deleted`],
+    ["a page with a fragment", `/goals/${GOAL}/roadmap#top`],
   ])("never comes back to %s, only to the goal page", async (_name, returnTo) => {
     api.requestLessonExport.mockRejectedValue(new ApiError(409, "EXPORT_BUSY", "Busy"));
 
     await expect(
       requestLessonExportAction(GOAL, LESSON, returnTo, form({ format: "notes_pdf" })),
     ).rejects.toThrow(`REDIRECT:/goals/${GOAL}?notice=export-busy`);
+  });
+
+  it("comes back to the page as a browser would resolve it, when it stays in the goal", async () => {
+    api.requestLessonExport.mockRejectedValue(new ApiError(409, "EXPORT_BUSY", "Busy"));
+
+    await expect(
+      requestLessonExportAction(
+        GOAL,
+        LESSON,
+        `/goals/${GOAL}/learn/x/%2e%2e/./roadmap`,
+        form({ format: "notes_pdf" }),
+      ),
+    ).rejects.toThrow(`REDIRECT:/goals/${GOAL}/learn/roadmap?notice=export-busy`);
   });
 });
 

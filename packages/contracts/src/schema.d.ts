@@ -318,7 +318,10 @@ export interface paths {
         post?: never;
         /**
          * Permanently delete an archived goal
-         * @description Also removes the goal's uploaded and exported files from storage (its rows cascade).
+         * @description Also removes the goal's exported and uploaded files from storage (its rows cascade).
+         *
+         *     Exported files go first: they can be made again, the learner's own documents cannot, so a
+         *     storage failure part-way never leaves a kept goal without its original files.
          */
         delete: operations["delete_goal_v1_goals__goal_id__delete"];
         options?: never;

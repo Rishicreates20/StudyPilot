@@ -158,12 +158,15 @@ async def delete_goal(
     files: FilesDep,
     export_files: ExportFilesDep,
 ) -> Response:
-    """Also removes the goal's uploaded and exported files from storage (its rows cascade)."""
-    await documents_service.purge_goal_files(
-        database, principal, token, files=files, goal_id=goal_id
-    )
+    """Also removes the goal's exported and uploaded files from storage (its rows cascade).
+
+    Exported files go first: they can be made again, the learner's own documents cannot, so a
+    storage failure part-way never leaves a kept goal without its original files."""
     await exports_service.purge_goal_exports(
         database, principal, token, files=export_files, goal_id=goal_id
+    )
+    await documents_service.purge_goal_files(
+        database, principal, token, files=files, goal_id=goal_id
     )
     async with database.user_transaction(principal) as connection:
         await goals_service.delete_goal(connection, principal, goal_id)

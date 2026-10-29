@@ -138,6 +138,10 @@ def _checklist(pdf: StudyDocument, items: list[str]) -> None:
     """Items with an empty box to tick on paper (a drawn square: no font needs a glyph)."""
     pdf.set_font(BODY_FAMILY, "", 9.5)
     for item in items:
+        # Box and text start on the same page: if the first line would not fit, multi_cell would
+        # move the text over and leave the box behind.
+        if pdf.will_page_break(LINE * 0.9):
+            pdf.add_page()
         y = pdf.get_y()
         pdf.set_draw_color(*MUTED)
         pdf.rect(pdf.l_margin + 1, y + 1.2, 3.2, 3.2)
