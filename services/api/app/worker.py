@@ -48,7 +48,7 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
                 provider = None
                 log.warning(
                     "worker.ai_not_configured",
-                    hint="Set LLM_PROVIDER (and GEMINI_API_KEY) or roadmap jobs will fail.",
+                    hint="Set LLM_PROVIDER (and GEMINI_API_KEY) or AI jobs will fail.",
                 )
             env = WorkerEnv(
                 database=database,
