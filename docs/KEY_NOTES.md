@@ -2,6 +2,15 @@
 
 Written 2026-10-23 from the review sessions of 2026-10-12 and a fresh look at the repository. Every claim says whether it was observed.
 
+## Update 2026-10-29
+
+- **CI was red everywhere, now fixed on `main`.** `main` failed its production `npm audit` from 2026-10-23 (Next.js 16.4.0, critical advisories), and a zod advisory (GHSA-mrhx-c7xc-m3w5, high, zod < 4.6.6) then failed every branch at `--audit-level=high`. #3 (Next.js 16.4.2, zod 4.6.7, robust API error bodies) and #4 (M7 flashcards, brought up to date with `main`) were merged after green runs 40904058055 and 40905780424 (all five jobs, read); #2 was closed as a duplicate of #3.
+- **Flashcards (M7 first slice) are on `main`.** Its migration ran under a genuine Supabase stack in CI; it is **not applied to the hosted project** yet (needs the owner's go-ahead).
+- **Exports (M8) are built** on `feat/m8-exports` (ADR-049), now merged with `main` and tested (API 2132 passed / 1 skipped, web 1177 passed, production build). The table in §1 below still says "schema only" for exports: that is out of date.
+- **A Vercel project is connected to the repository** and its preview deployment failed on both #3 and #4. Its log could not be read from here (the Vercel connector has no access to that team); a likely cause, not verified, is missing `NEXT_PUBLIC_*` variables or a root directory other than `apps/web`.
+- **Dev-only advisories:** `npm audit` without `--omit=dev` reports 10 (6 high), mostly under `shadcn`'s MCP SDK dependencies; CI gates production dependencies only.
+- **Still parked:** the OpenAI-compatible provider exists as untracked files in the main checkout (failing ruff, pyright and one test), in `stash@{0}`, and as the pushed branch `origin/feat/ai-provider-chain` (no pull request). `DATABASE_URL` is now set in `services/api/.env` (checked by name only).
+
 ## 1. Where the app stands
 
 | Area | State | Evidence |

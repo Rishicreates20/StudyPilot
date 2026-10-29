@@ -12,9 +12,10 @@ from app.ai.lesson.writer import LessonInvalid
 from app.ai.provider import LLMError
 from app.ai.quiz.writer import QuizInvalid
 from app.ai.roadmap.planner import PlanInvalid
-from app.jobs import document_store, queue
+from app.jobs import document_store, export_store, queue
 from app.jobs.document_job import run_document
 from app.jobs.errors import JobCancelled, JobFailure, LeaseLost
+from app.jobs.export_job import run_export
 from app.jobs.grade_job import run_grade
 from app.jobs.lesson_job import run_lesson
 from app.jobs.queue import Job
@@ -37,13 +38,24 @@ async def process_job(env: WorkerEnv, job: Job) -> None:
                 await run_grade(env, job, lease)
             elif job.job_type == "document":
                 await run_document(env, job, lease)
-            else:
+            elif job.job_type == "export":
+                await run_export(env, job, lease)
+            elif job.job_type == "roadmap":
                 await run_roadmap(env, job, lease)
+            else:
+                # A kind the database allows but this worker cannot run (for example `resources`,
+                # whose code is not in this repository). Never fall through to another runner.
+                raise JobFailure(
+                    "JOB_TYPE_UNSUPPORTED", "This kind of job isn't supported on this server yet."
+                )
         except LeaseLost:
             log.warning("job.lease_lost", job_id=str(job.id))
         except JobCancelled:
             async with env.database.system_session() as connection:
                 cancelled = await queue.mark_cancelled(connection, job.id, env.worker_id)
+                if cancelled and job.export_id is not None:
+                    # As for a failure: the upload capability goes; asking again makes a fresh one.
+                    await export_store.clear_grant(connection, job.user_id, job.export_id)
                 if cancelled and job.document_id is not None:
                     await document_store.mark_failed(
                         connection,
@@ -119,6 +131,9 @@ async def _end(
         failed = await queue.fail(
             connection, job.id, env.worker_id, code=code, message=message + suffix
         )
+        if failed and job.export_id is not None:
+            # The upload capability is of no further use; asking again makes a fresh one.
+            await export_store.clear_grant(connection, job.user_id, job.export_id)
         if failed and job.document_id is not None:
             # A document must never wait for a job that has ended; and the signed link goes too.
             await document_store.mark_failed(

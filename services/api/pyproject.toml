@@ -19,6 +19,9 @@ dependencies = [
     "tzdata==2026.5",
     # PDF text extraction: pure Python, BSD licence (PyMuPDF is AGPL and is avoided, ADR-014).
     "pypdf==6.20.0",
+    "fpdf2==2.8.9",
+    "uharfbuzz==0.56.4",
+    "python-pptx==1.0.2",
 ]
 
 [dependency-groups]
@@ -26,6 +29,7 @@ dev = [
     "pytest==9.1.1",
     "pyright==1.1.414",
     "ruff==0.16.10",
+    "pypdfium2==5.14.0",
 ]
 
 [tool.uv]

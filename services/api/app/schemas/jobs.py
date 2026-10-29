@@ -7,7 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
-JobType = Literal["roadmap", "lesson", "quiz", "grade", "document"]
+# `resources` exists in the database (the recovered resources migration) but nothing in this
+# repository creates or runs it yet; it is listed so such a row can still be shown.
+JobType = Literal["roadmap", "lesson", "quiz", "grade", "document", "export", "resources"]
 
 
 class GenerationJob(BaseModel):
@@ -22,6 +24,8 @@ class GenerationJob(BaseModel):
     attempt_id: UUID | None
     # The document a document job processes; None for every other kind of job.
     document_id: UUID | None
+    # The export an export job renders; None for every other kind of job.
+    export_id: UUID | None = None
     status: JobStatus
     # Where the job is: queued, starting, loading, planning or writing, validated, saving,
     # waiting_retry, done, failed, cancelled. For display only; branch on `status`.

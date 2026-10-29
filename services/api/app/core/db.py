@@ -43,6 +43,11 @@ UserConnection = NewType("UserConnection", AsyncConnection[DictRow])
 # fails the build if it does. Functions that take it filter by ``user_id`` explicitly.
 SystemConnection = NewType("SystemConnection", AsyncConnection[DictRow])
 
+# The few read-only repository functions the worker shares with the API (rendering an export reads
+# the same lesson and roadmap the learner sees) accept either kind. They always filter by
+# ``user_id``, so a privileged connection reads nothing through them that a request could not.
+ReadConnection = AsyncConnection[DictRow]
+
 _PING_TIMEOUT_SECONDS = 2.0
 
 

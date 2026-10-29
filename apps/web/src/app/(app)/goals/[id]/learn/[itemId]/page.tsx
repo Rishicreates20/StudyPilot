@@ -11,6 +11,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
+import { ExportPanel } from "@/components/exports/export-panel";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { NoticeBanner } from "@/components/feedback/notice-banner";
 import { SubmitButton } from "@/components/forms/submit-button";
@@ -250,6 +251,13 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
             versions={view.versions}
             viewingId={state.lesson.id}
             timeZone={me.timezone}
+          />
+          <ExportPanel
+            goalId={id}
+            kind="lesson"
+            sourceId={state.lesson.id}
+            returnTo={studyPath(id, itemId)}
+            readOnly={archived}
           />
         </>
       ) : (
