@@ -123,7 +123,7 @@ async def get(
 ) -> ExportRow | None:
     lock = " for update of e" if for_update else ""
     cursor = await connection.execute(
-        f"select {_COLUMNS}{_FROM} where e.id = %s and e.user_id = %s{lock}",  # noqa: S608
+        f"select {_COLUMNS}{_FROM} where e.id = %s and e.user_id = %s{lock}",
         (export_id, user_id),
     )
     row = await cursor.fetchone()
@@ -134,7 +134,7 @@ async def list_for_goal(
     connection: UserConnection, user_id: UUID, goal_id: UUID
 ) -> list[ExportRow]:
     cursor = await connection.execute(
-        f"select {_COLUMNS}{_FROM}"  # noqa: S608
+        f"select {_COLUMNS}{_FROM}"
         " where e.user_id = %s and e.goal_id = %s order by e.created_at desc, e.id desc",
         (user_id, goal_id),
     )
