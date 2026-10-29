@@ -207,6 +207,18 @@ async def test_the_model_id_falls_back_to_the_requested_one_and_is_never_too_lon
     assert len(long.model_id) == 100
 
 
+@pytest.mark.parametrize("finish", [None, "eos"])
+async def test_providers_that_report_a_normal_finish_differently_are_accepted(
+    finish: str | None,
+) -> None:
+    body = completion()
+    body["choices"][0]["finish_reason"] = finish
+
+    result = await make_provider(respond(200, body)).generate_structured(REQUEST, Answer)
+
+    assert result.value == Answer(name="ok", count=2)
+
+
 @pytest.mark.parametrize(
     "content",
     [
@@ -265,6 +277,34 @@ async def test_a_reasoning_model_that_used_everything_on_thinking_is_truncated()
 async def test_a_content_filter_is_blocked() -> None:
     with pytest.raises(LLMBlocked):
         await call(respond(200, completion("", finish="content_filter")))
+
+
+async def test_a_refusal_is_blocked_and_its_text_is_not_kept() -> None:
+    body = completion(None)
+    body["choices"][0]["message"]["refusal"] = "I won't discuss the learner's diagnosis."
+
+    with pytest.raises(LLMBlocked) as raised:
+        await call(respond(200, body))
+
+    assert "diagnosis" not in raised.value.detail
+
+
+async def test_an_answer_the_provider_found_invalid_is_a_bad_answer_not_a_bad_setup() -> None:
+    # Groq refuses to return an answer that is not valid JSON, with the answer attached.
+    body = {
+        "error": {
+            "message": "Failed to generate JSON. Please adjust your prompt.",
+            "type": "invalid_request_error",
+            "code": "json_validate_failed",
+            "failed_generation": "the learner's private essay",
+        }
+    }
+
+    with pytest.raises(LLMInvalidOutput) as raised:
+        await call(respond(400, body))
+
+    assert raised.value.problems == []  # the caller's own repair wording is used
+    assert "private essay" not in raised.value.detail
 
 
 async def test_a_reply_without_choices_is_unavailable() -> None:

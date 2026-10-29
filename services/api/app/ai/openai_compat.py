@@ -198,7 +198,21 @@ def _raise_for_status(response: httpx2.Response) -> None:
         raise LLMTimeout(detail)
     if status >= 500:
         raise LLMUnavailable(detail, retry_after=delay)
+    if _error_label(response) == "json_validate_failed":
+        # Groq checks the answer itself and refuses to return one that is not valid JSON (or does
+        # not match the schema). That is a bad answer, not a bad setup: the caller may repair it,
+        # and the provider must not rest for an hour as if its key or model were wrong. The
+        # rejected answer (``failed_generation``) is never read.
+        raise LLMInvalidOutput(detail)
     raise LLMRejected(detail)
+
+
+def _error_label(response: httpx2.Response) -> str:
+    try:
+        body: object = response.json()
+    except ValueError:
+        return ""
+    return _error_message(body)[0]
 
 
 def _error_message(body: object) -> tuple[str, str]:
@@ -270,9 +284,12 @@ def _text_and_finish_reason(payload: dict[str, Any]) -> tuple[str, str]:
         raise LLMUnavailable("the provider returned no choices")
     choice = _dict(choices[0])
     finish_reason = str(choice.get("finish_reason") or "stop")
+    message = _dict(choice.get("message"))
     if finish_reason == "content_filter":
         raise LLMBlocked("finish_reason=content_filter")
-    content = _dict(choice.get("message")).get("content")
+    if message.get("refusal"):  # OpenAI's structured-output refusal; its text is never kept
+        raise LLMBlocked("refusal")
+    content = message.get("content")
     if isinstance(content, list):  # some providers return a list of content parts
         text = "".join(str(_dict(part).get("text", "")) for part in cast(list[Any], content))
     else:
