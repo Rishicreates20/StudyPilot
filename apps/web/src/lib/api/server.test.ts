@@ -155,6 +155,41 @@ describe("API failures", () => {
     expect(error.message).not.toContain("<html>");
   });
 
+  // A proxy, gateway or misbehaving server can answer with JSON that is not a problem document.
+  // The client must still produce a well-formed ApiError instead of crashing the page.
+  it.each([
+    ["errors is not a list", { errors: "something broke" }],
+    ["an error entry has no field", { errors: [{ message: "x" }] }],
+    ["an error entry is not an object", { errors: [null, 3, "x"] }],
+    ["field and message are not strings", { errors: [{ field: 7, message: { a: 1 } }] }],
+    ["code and detail are not strings", { code: 500, detail: { nested: true } }],
+    ["the body is a JSON array", [1, 2, 3]],
+    ["the body is JSON null", null],
+  ])("turns a malformed JSON error body (%s) into a generic ApiError", async (_, body) => {
+    stubFetch(() => json(body, 500));
+
+    const error = (await fetchMe("t").catch((e: unknown) => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 500, code: "HTTP_500", message: "Request failed." });
+    expect(error.fieldErrors).toEqual({});
+  });
+
+  it("keeps the well-formed field errors of a partly malformed body", async () => {
+    stubFetch(() =>
+      problem(422, {
+        code: "VALIDATION_ERROR",
+        detail: "Invalid.",
+        errors: [{ field: "body.title", message: "Too long." }, { message: "no field" }, "junk"],
+      }),
+    );
+
+    const error = (await fetchMe("t").catch((e: unknown) => e)) as ApiError;
+
+    expect(error).toMatchObject({ status: 422, code: "VALIDATION_ERROR", message: "Invalid." });
+    expect(error.fieldErrors).toEqual({ title: "Too long." });
+  });
+
   it("reports an unreachable API as status 0", async () => {
     stubFetch(() => {
       throw new TypeError("fetch failed");
