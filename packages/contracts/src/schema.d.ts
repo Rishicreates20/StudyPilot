@@ -221,6 +221,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/flashcards/{card_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a card and its review history */
+        delete: operations["delete_flashcard_v1_flashcards__card_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change what a card says or which topic it is about
+         * @description The schedule is not editable: it only moves when the card is reviewed.
+         */
+        patch: operations["update_flashcard_v1_flashcards__card_id__patch"];
+        trace?: never;
+    };
+    "/v1/flashcards/{card_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A card's review history, newest first */
+        get: operations["flashcard_history_v1_flashcards__card_id__reviews_get"];
+        put?: never;
+        /**
+         * Rate how well you remembered a card
+         * @description The server decides the card's next due date from the rating (`again`, `hard`, `good`,
+         *     `easy`) and records the review. Send an `Idempotency-Key` so a double click counts once.
+         */
+        post: operations["review_flashcard_v1_flashcards__card_id__reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/goals": {
         parameters: {
             query?: never;
@@ -356,6 +399,45 @@ export interface paths {
         };
         /** A goal's exported files, newest first, each with its status */
         get: operations["list_exports_v1_goals__goal_id__exports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/flashcards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A goal's flashcards, newest first, with where the deck stands */
+        get: operations["list_flashcards_v1_goals__goal_id__flashcards_get"];
+        put?: never;
+        /**
+         * Add a flashcard to a goal
+         * @description The card is due at once. It may name a topic of the goal's roadmap (422 `UNKNOWN_TOPIC`
+         *     otherwise). A goal holds a limited number of cards (409 `FLASHCARD_LIMIT_REACHED`).
+         */
+        post: operations["create_flashcard_v1_goals__goal_id__flashcards_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{goal_id}/flashcards/due": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The cards to review now, most overdue first */
+        get: operations["due_flashcards_v1_goals__goal_id__flashcards_due_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1287,6 +1369,189 @@ export interface components {
             field: string;
             /** Message */
             message: string;
+        };
+        /** Flashcard */
+        Flashcard: {
+            /** Back */
+            back: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+            /** Ease Factor */
+            ease_factor: number;
+            /** Front */
+            front: string;
+            /**
+             * Goal Id
+             * Format: uuid
+             */
+            goal_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interval Days */
+            interval_days: number;
+            /** Is Due */
+            is_due: boolean;
+            /** Item Id */
+            item_id: string | null;
+            /** Lapses */
+            lapses: number;
+            /** Last Reviewed At */
+            last_reviewed_at: string | null;
+            /**
+             * Origin
+             * @constant
+             */
+            origin: "manual";
+            /** Repetitions */
+            repetitions: number;
+            /** Scheduler Version */
+            scheduler_version: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * FlashcardCreate
+         * @description A new card. It is due at once.
+         */
+        FlashcardCreate: {
+            /**
+             * Back
+             * @description The answer.
+             */
+            back: string;
+            /**
+             * Front
+             * @description The question or prompt.
+             */
+            front: string;
+            /**
+             * Item Id
+             * @description A topic of this goal's roadmap the card is about (optional).
+             */
+            item_id?: string | null;
+        };
+        /**
+         * FlashcardDueQueue
+         * @description The cards to review now, most overdue first, and how many more are waiting.
+         */
+        FlashcardDueQueue: {
+            /** Cards */
+            cards: components["schemas"]["Flashcard"][];
+            summary: components["schemas"]["FlashcardSummary"];
+        };
+        /** FlashcardList */
+        FlashcardList: {
+            /** Cards */
+            cards: components["schemas"]["Flashcard"][];
+            summary: components["schemas"]["FlashcardSummary"];
+        };
+        /** FlashcardReview */
+        FlashcardReview: {
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /**
+             * Due After
+             * Format: date-time
+             */
+            due_after: string;
+            /** Ease After */
+            ease_after: number;
+            /** Ease Before */
+            ease_before: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Interval After */
+            interval_after: number;
+            /** Interval Before */
+            interval_before: number;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "again" | "hard" | "good" | "easy";
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /** Scheduler Version */
+            scheduler_version: string;
+        };
+        /** FlashcardReviewHistory */
+        FlashcardReviewHistory: {
+            /** Reviews */
+            reviews: components["schemas"]["FlashcardReview"][];
+        };
+        /**
+         * FlashcardReviewRequest
+         * @description How well the learner remembered a card.
+         */
+        FlashcardReviewRequest: {
+            /**
+             * Rating
+             * @description `again` (forgot), `hard`, `good` or `easy`. The server decides what happens.
+             * @enum {string}
+             */
+            rating: "again" | "hard" | "good" | "easy";
+        };
+        /**
+         * FlashcardReviewResult
+         * @description The card with its new schedule, and the review that made it.
+         */
+        FlashcardReviewResult: {
+            card: components["schemas"]["Flashcard"];
+            review: components["schemas"]["FlashcardReview"];
+        };
+        /**
+         * FlashcardSummary
+         * @description Where a goal's deck stands.
+         */
+        FlashcardSummary: {
+            /** Due Now */
+            due_now: number;
+            /**
+             * Limit
+             * @default 500
+             */
+            limit: number;
+            /** Next Due At */
+            next_due_at: string | null;
+            /** Reviewed Today */
+            reviewed_today: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * FlashcardUpdate
+         * @description Change what a card says or which topic it is about. The schedule is not editable here.
+         */
+        FlashcardUpdate: {
+            /** Back */
+            back?: string | null;
+            /** Front */
+            front?: string | null;
+            /** Item Id */
+            item_id?: string | null;
         };
         /** GenerationJob */
         GenerationJob: {
@@ -3432,6 +3697,283 @@ export interface operations {
             };
         };
     };
+    delete_flashcard_v1_flashcards__card_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal is archived or the limit is reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    update_flashcard_v1_flashcards__card_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlashcardUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Flashcard"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal is archived or the limit is reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    flashcard_history_v1_flashcards__card_id__reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlashcardReviewHistory"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    review_flashcard_v1_flashcards__card_id__reviews_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a review: it is applied only once. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlashcardReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description The same review again: the same result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlashcardReviewResult"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlashcardReviewResult"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal is archived or the limit is reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     list_goals_v1_goals_get: {
         parameters: {
             query?: {
@@ -4128,6 +4670,195 @@ export interface operations {
                 };
             };
             /** @description No such lesson, roadmap, goal or export */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_flashcards_v1_goals__goal_id__flashcards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlashcardList"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_flashcard_v1_goals__goal_id__flashcards_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlashcardCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Flashcard"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The goal is archived or the limit is reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    due_flashcards_v1_goals__goal_id__flashcards_due_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlashcardDueQueue"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such goal or flashcard for this user */
             404: {
                 headers: {
                     [name: string]: unknown;

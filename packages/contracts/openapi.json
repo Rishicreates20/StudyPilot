@@ -1327,6 +1327,407 @@
         "title": "FieldError",
         "type": "object"
       },
+      "Flashcard": {
+        "properties": {
+          "back": {
+            "title": "Back",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          },
+          "ease_factor": {
+            "title": "Ease Factor",
+            "type": "number"
+          },
+          "front": {
+            "title": "Front",
+            "type": "string"
+          },
+          "goal_id": {
+            "format": "uuid",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_days": {
+            "title": "Interval Days",
+            "type": "integer"
+          },
+          "is_due": {
+            "title": "Is Due",
+            "type": "boolean"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "lapses": {
+            "title": "Lapses",
+            "type": "integer"
+          },
+          "last_reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reviewed At"
+          },
+          "origin": {
+            "const": "manual",
+            "title": "Origin",
+            "type": "string"
+          },
+          "repetitions": {
+            "title": "Repetitions",
+            "type": "integer"
+          },
+          "scheduler_version": {
+            "title": "Scheduler Version",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "item_id",
+          "origin",
+          "front",
+          "back",
+          "due_at",
+          "is_due",
+          "interval_days",
+          "ease_factor",
+          "repetitions",
+          "lapses",
+          "last_reviewed_at",
+          "scheduler_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Flashcard",
+        "type": "object"
+      },
+      "FlashcardCreate": {
+        "additionalProperties": false,
+        "description": "A new card. It is due at once.",
+        "properties": {
+          "back": {
+            "description": "The answer.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Back",
+            "type": "string"
+          },
+          "front": {
+            "description": "The question or prompt.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Front",
+            "type": "string"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A topic of this goal's roadmap the card is about (optional).",
+            "title": "Item Id"
+          }
+        },
+        "required": [
+          "front",
+          "back"
+        ],
+        "title": "FlashcardCreate",
+        "type": "object"
+      },
+      "FlashcardDueQueue": {
+        "description": "The cards to review now, most overdue first, and how many more are waiting.",
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Flashcard"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FlashcardSummary"
+          }
+        },
+        "required": [
+          "cards",
+          "summary"
+        ],
+        "title": "FlashcardDueQueue",
+        "type": "object"
+      },
+      "FlashcardList": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/Flashcard"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FlashcardSummary"
+          }
+        },
+        "required": [
+          "cards",
+          "summary"
+        ],
+        "title": "FlashcardList",
+        "type": "object"
+      },
+      "FlashcardReview": {
+        "properties": {
+          "card_id": {
+            "format": "uuid",
+            "title": "Card Id",
+            "type": "string"
+          },
+          "due_after": {
+            "format": "date-time",
+            "title": "Due After",
+            "type": "string"
+          },
+          "ease_after": {
+            "title": "Ease After",
+            "type": "number"
+          },
+          "ease_before": {
+            "title": "Ease Before",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_after": {
+            "title": "Interval After",
+            "type": "integer"
+          },
+          "interval_before": {
+            "title": "Interval Before",
+            "type": "integer"
+          },
+          "rating": {
+            "enum": [
+              "again",
+              "hard",
+              "good",
+              "easy"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "scheduler_version": {
+            "title": "Scheduler Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "card_id",
+          "rating",
+          "scheduler_version",
+          "reviewed_at",
+          "interval_before",
+          "ease_before",
+          "interval_after",
+          "ease_after",
+          "due_after"
+        ],
+        "title": "FlashcardReview",
+        "type": "object"
+      },
+      "FlashcardReviewHistory": {
+        "properties": {
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/FlashcardReview"
+            },
+            "title": "Reviews",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reviews"
+        ],
+        "title": "FlashcardReviewHistory",
+        "type": "object"
+      },
+      "FlashcardReviewRequest": {
+        "additionalProperties": false,
+        "description": "How well the learner remembered a card.",
+        "properties": {
+          "rating": {
+            "description": "`again` (forgot), `hard`, `good` or `easy`. The server decides what happens.",
+            "enum": [
+              "again",
+              "hard",
+              "good",
+              "easy"
+            ],
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "FlashcardReviewRequest",
+        "type": "object"
+      },
+      "FlashcardReviewResult": {
+        "description": "The card with its new schedule, and the review that made it.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/Flashcard"
+          },
+          "review": {
+            "$ref": "#/components/schemas/FlashcardReview"
+          }
+        },
+        "required": [
+          "card",
+          "review"
+        ],
+        "title": "FlashcardReviewResult",
+        "type": "object"
+      },
+      "FlashcardSummary": {
+        "description": "Where a goal's deck stands.",
+        "properties": {
+          "due_now": {
+            "title": "Due Now",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 500,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due At"
+          },
+          "reviewed_today": {
+            "title": "Reviewed Today",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "due_now",
+          "next_due_at",
+          "reviewed_today"
+        ],
+        "title": "FlashcardSummary",
+        "type": "object"
+      },
+      "FlashcardUpdate": {
+        "additionalProperties": false,
+        "description": "Change what a card says or which topic it is about. The schedule is not editable here.",
+        "properties": {
+          "back": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Back"
+          },
+          "front": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Front"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          }
+        },
+        "title": "FlashcardUpdate",
+        "type": "object"
+      },
       "GenerationJob": {
         "properties": {
           "attempt_id": {
@@ -6139,6 +6540,389 @@
         ]
       }
     },
+    "/v1/flashcards/{card_id}": {
+      "delete": {
+        "operationId": "delete_flashcard_v1_flashcards__card_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The goal is archived or the limit is reached"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete a card and its review history",
+        "tags": [
+          "flashcards"
+        ]
+      },
+      "patch": {
+        "description": "The schedule is not editable: it only moves when the card is reviewed.",
+        "operationId": "update_flashcard_v1_flashcards__card_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Flashcard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The goal is archived or the limit is reached"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Change what a card says or which topic it is about",
+        "tags": [
+          "flashcards"
+        ]
+      }
+    },
+    "/v1/flashcards/{card_id}/reviews": {
+      "get": {
+        "operationId": "flashcard_history_v1_flashcards__card_id__reviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardReviewHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A card's review history, newest first",
+        "tags": [
+          "flashcards"
+        ]
+      },
+      "post": {
+        "description": "The server decides the card's next due date from the rating (`again`, `hard`, `good`,\n`easy`) and records the review. Send an `Idempotency-Key` so a double click counts once.",
+        "operationId": "review_flashcard_v1_flashcards__card_id__reviews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Send the same value when resubmitting a review: it is applied only once.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Send the same value when resubmitting a review: it is applied only once.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardReviewResult"
+                }
+              }
+            },
+            "description": "The same review again: the same result"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardReviewResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The goal is archived or the limit is reached"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rate how well you remembered a card",
+        "tags": [
+          "flashcards"
+        ]
+      }
+    },
     "/v1/goals": {
       "get": {
         "operationId": "list_goals_v1_goals_get",
@@ -7161,6 +7945,271 @@
         "summary": "A goal's exported files, newest first, each with its status",
         "tags": [
           "exports"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/flashcards": {
+      "get": {
+        "operationId": "list_flashcards_v1_goals__goal_id__flashcards_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A goal's flashcards, newest first, with where the deck stands",
+        "tags": [
+          "flashcards"
+        ]
+      },
+      "post": {
+        "description": "The card is due at once. It may name a topic of the goal's roadmap (422 `UNKNOWN_TOPIC`\notherwise). A goal holds a limited number of cards (409 `FLASHCARD_LIMIT_REACHED`).",
+        "operationId": "create_flashcard_v1_goals__goal_id__flashcards_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlashcardCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Flashcard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The goal is archived or the limit is reached"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add a flashcard to a goal",
+        "tags": [
+          "flashcards"
+        ]
+      }
+    },
+    "/v1/goals/{goal_id}/flashcards/due": {
+      "get": {
+        "operationId": "due_flashcards_v1_goals__goal_id__flashcards_due_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlashcardDueQueue"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such goal or flashcard for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The cards to review now, most overdue first",
+        "tags": [
+          "flashcards"
         ]
       }
     },
