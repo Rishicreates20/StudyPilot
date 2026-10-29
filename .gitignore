@@ -52,6 +52,8 @@ tmp/
 
 # --- Claude Code local settings (per-developer) ----------------------------
 .claude/settings.local.json
+# Worktrees the desktop app creates inside the checkout (each is a full copy of the repository)
+.claude/worktrees/
 
 # Uploaded study documents of a local run (DOCUMENT_STORAGE=local): never committed
 services/api/.data/
