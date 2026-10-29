@@ -105,6 +105,8 @@ Each requirement has an ID so milestones, tests and commits can reference it.
 
 PDF and PPT export, Hindi/Odia improvements, Expo apps, subscriptions, offline study, additional exam verticals.
 
+**Implementation status for export (2026-10-29):** built (ADR-049). A lesson version can be saved as study notes (PDF), a revision sheet (PDF) or slides (PowerPoint), and a roadmap version as a PDF or slides; files are private, kept per learner and downloaded through short-lived links; Hindi and Odia text uses bundled fonts, and any character the fonts cannot show is counted and reported rather than silently dropped. Not yet observed with real Supabase Storage or judged by a person. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (M8).
+
 ## 6. Non-functional requirements
 
 | Area | Requirement |
