@@ -1,0 +1,72 @@
+# Render Blueprint for the StudyPilot API and background worker (staging).
+#
+# NOT YET APPLIED: nothing has been deployed from this file. Steps and open decisions are in
+# docs/DEPLOYMENT.md. Every `sync: false` value is asked for once, in Render's dashboard, when the
+# Blueprint is first created; none of them belongs in Git.
+#
+# Both services build the same image (the last stage of services/api/Dockerfile, `runtime`);
+# only the command differs. The web app is deployed on Vercel, not here.
+#
+# Field names were checked against https://render.com/docs/blueprint-spec on 2026-11-01.
+# [verify] the `envVarGroups` / `fromGroup` form and the plan names again when applying.
+
+envVarGroups:
+  - name: studypilot-api-env
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: LOG_LEVEL
+        value: INFO
+      # https only, scheme and host only, comma separated: the Vercel URL of the web app.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Session-pooler string from Supabase > Connect, with ?sslmode=require. SECRET.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      # The publishable key (public by design). Never the service-role / secret key.
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_MODE
+        value: jwks
+      # `fake` is refused in staging and production.
+      - key: LLM_PROVIDER
+        value: gemini
+      # SECRET.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_THINKING_LEVEL
+        value: low
+
+services:
+  - type: web
+    name: studypilot-api
+    runtime: docker
+    dockerfilePath: ./services/api/Dockerfile
+    dockerContext: ./services/api
+    healthCheckPath: /healthz
+    # Smallest paid plan: a free web service sleeps, which would stall the app's first request.
+    plan: 0.5c-512mb
+    # Keep this in the same region as the Supabase project (decision open: docs/DEPLOYMENT.md).
+    region: singapore
+    autoDeployTrigger: checksPass
+    envVars:
+      - fromGroup: studypilot-api-env
+      - key: APP_VERSION
+        value: staging
+
+  - type: worker
+    name: studypilot-worker
+    runtime: docker
+    dockerfilePath: ./services/api/Dockerfile
+    dockerContext: ./services/api
+    dockerCommand: python -m app.worker
+    # A background worker has no free plan; this is the always-on cost the plan warned about.
+    plan: 0.5c-512mb
+    region: singapore
+    autoDeployTrigger: checksPass
+    envVars:
+      - fromGroup: studypilot-api-env
+      - key: APP_VERSION
+        value: staging
