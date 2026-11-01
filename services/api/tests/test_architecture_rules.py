@@ -121,6 +121,19 @@ def test_the_scoring_rules_are_pure() -> None:
         assert not any(module.startswith(forbidden) for module in modules), path
 
 
+def test_the_video_rules_are_pure() -> None:
+    """Ranking and the quota day read no database or network. ``app/videos/youtube.py`` is the one
+    module there that talks to YouTube, and nothing there may reach a model (ADR-051)."""
+    forbidden = ("psycopg", "app.core.db", "app.repositories", "app.jobs", "fastapi", "httpx")
+    rules = [path for path in python_files("videos") if path.name != "youtube.py"]
+    assert rules
+    for path in rules:
+        modules = imported_modules(path)
+        assert not any(module.startswith(forbidden) for module in modules), path
+    for path in python_files("videos"):
+        assert not any(module.startswith("app.ai") for module in imported_modules(path)), path
+
+
 def test_the_export_renderers_are_pure() -> None:
     """Rendering a PDF or a deck reads no database, storage or network: only the data it is given.
     ``app/exports/files.py`` is the one module there that talks to storage."""

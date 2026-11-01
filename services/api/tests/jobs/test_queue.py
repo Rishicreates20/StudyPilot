@@ -1,18 +1,22 @@
 """The queue itself: claiming, leases, recovery and the rules for who may write."""
 
 import asyncio
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
 
+from app.ai.factory import builtin_responder
+from app.ai.fake import FakeProvider
 from app.core.db import Database
 from app.jobs import queue
 from app.jobs.errors import JobCancelled, LeaseLost
+from app.jobs.runner import process_job
 from app.jobs.runtime import Lease, backoff_seconds
 from app.jobs.worker import Worker
 from support.database import admin, create_auth_user
 from support.rows import add_goal, add_job
-from support.worker import job_state, make_env, seed_job, worker_settings
+from support.worker import job_state, make_env, roadmaps_of, seed_job, worker_settings
 
 pytestmark = pytest.mark.anyio
 
@@ -28,6 +32,28 @@ async def claim(database: Database, worker: str = "worker-a", **kwargs: int) -> 
 
 
 # --- Claiming --------------------------------------------------------------------------------
+
+
+async def test_a_job_of_an_unknown_kind_fails_instead_of_running_as_a_roadmap(
+    database: Database, database_dsn: str
+) -> None:
+    # The database allows only kinds this worker runs, so an unknown one is handed over directly:
+    # an older worker meeting a kind added later must fail it, never fall through to another.
+    _, goal, job_id = seed_job(database_dsn)
+    job = await claim(database)
+    assert job is not None and job.id == job_id
+    env = make_env(
+        database,
+        worker_settings(database_dsn),
+        FakeProvider(builtin_responder),
+        worker_id="worker-a",
+    )
+
+    await process_job(env, replace(job, job_type="mystery"))
+
+    state = job_state(database_dsn, job_id)
+    assert (state["status"], state["error_code"]) == ("failed", "JOB_TYPE_UNSUPPORTED")
+    assert roadmaps_of(database_dsn, goal) == []
 
 
 async def test_claiming_locks_the_job_to_one_worker(database: Database, database_dsn: str) -> None:

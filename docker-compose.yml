@@ -34,6 +34,8 @@ services:
       # AI roadmap generation. The API only checks these are set; the worker uses them.
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Study videos. The API only checks the key is set; the worker calls YouTube with it.
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -66,6 +68,7 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
     volumes:
       - ./services/api/app:/srv/api/app
     depends_on:

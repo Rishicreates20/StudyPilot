@@ -6,7 +6,7 @@ from contextlib import suppress
 
 import structlog
 
-from app.jobs import document_store, queue
+from app.jobs import document_store, queue, videos_store
 from app.jobs.runner import process_job
 from app.jobs.runtime import WorkerEnv
 
@@ -39,10 +39,14 @@ class Worker:
             recovered = await queue.reap_expired(connection)
             # A reaped document job may have ended for good without saying so on its document.
             settled = await document_store.settle_documents(connection)
+            # Video suggestions are kept no longer than YouTube's policies allow without a refresh.
+            purged = await videos_store.purge_unverified(connection)
         for job_id in recovered:
             log.warning("job.recovered", job_id=str(job_id))
         for document_id in settled:
             log.warning("document.settled_as_failed", document_id=str(document_id))
+        if purged:
+            log.info("videos.purged", searches=purged)
         return len(recovered)
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -59,6 +63,7 @@ class Worker:
             ai_model=self.env.settings.gemini_model
             if provider and provider.name == "gemini"
             else None,
+            videos_configured=self.env.videos is not None,
         )
         tasks = [
             asyncio.create_task(self._consume(stop))

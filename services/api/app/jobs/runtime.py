@@ -26,6 +26,7 @@ from app.jobs import queue
 from app.jobs.errors import JobCancelled, LeaseLost
 from app.jobs.queue import Job
 from app.schemas.goals import today_utc
+from app.videos.youtube import YouTubeClient
 
 log = structlog.get_logger("app.jobs")
 
@@ -43,6 +44,8 @@ class WorkerEnv:
     files: DocumentFiles | None = None
     # Where exported files go; None when storage isn't configured (export jobs then fail).
     export_files: ExportFiles | None = None
+    # The YouTube Data API; None when no key is configured (video searches then fail).
+    videos: YouTubeClient | None = None
     today: Callable[[], date] = today_utc
     random: Callable[[], float] = field(default=random.random)
     # Waiting inside a job (for a rate limit to ease); tests replace it so they do not really wait.

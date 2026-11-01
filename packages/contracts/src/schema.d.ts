@@ -857,6 +857,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/roadmap-items/{item_id}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A topic's suggested study videos
+         * @description The videos found for a topic on YouTube, best match first, with the search they came from
+         *     and the newest search job. Revision sessions have none (404).
+         */
+        get: operations["read_videos_v1_roadmap_items__item_id__videos_get"];
+        put?: never;
+        /**
+         * Find study videos for a topic
+         * @description Queues a background search and returns it at once (202); poll `GET /v1/jobs/{id}`.
+         *
+         *     Without a body the topic's first search is made (409 if it already has suggestions). With
+         *     `refresh`, a new search replaces the current suggestions when it finishes.
+         */
+        post: operations["start_video_search_v1_roadmap_items__item_id__videos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/roadmaps/{roadmap_id}": {
         parameters: {
             query?: never;
@@ -2825,6 +2853,75 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** TopicVideo */
+        TopicVideo: {
+            /** Channel Title */
+            channel_title: string;
+            /** Duration Seconds */
+            duration_seconds: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Language */
+            language: string | null;
+            /**
+             * Language Source
+             * @enum {string}
+             */
+            language_source: "audio" | "metadata" | "unknown";
+            /**
+             * Last Verified At
+             * Format: date-time
+             */
+            last_verified_at: string;
+            /** Position */
+            position: number;
+            /** Published At */
+            published_at: string | null;
+            /** Relevance Score */
+            relevance_score: number;
+            /** Score Basis */
+            score_basis: {
+                [key: string]: number;
+            };
+            /** Searched Language */
+            searched_language: string;
+            /** Thumbnail Height */
+            thumbnail_height: number | null;
+            /** Thumbnail Url */
+            thumbnail_url: string | null;
+            /** Thumbnail Width */
+            thumbnail_width: number | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** Video Id */
+            video_id: string;
+            /** View Count */
+            view_count: number | null;
+        };
+        /**
+         * TopicVideos
+         * @description A topic's suggested videos, the search they came from, and the newest search job.
+         */
+        TopicVideos: {
+            /** Can Search */
+            can_search: boolean;
+            /** Configured */
+            configured: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            job: components["schemas"]["GenerationJob"] | null;
+            search: components["schemas"]["VideoSearchInfo"] | null;
+            /** Videos */
+            videos: components["schemas"]["TopicVideo"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2837,6 +2934,47 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VideoSearchInfo
+         * @description The search behind a topic's suggestions: what was asked, and what came back.
+         */
+        VideoSearchInfo: {
+            /** Candidates Seen */
+            candidates_seen: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Languages */
+            languages: string[];
+            /**
+             * Last Verified At
+             * Format: date-time
+             */
+            last_verified_at: string;
+            /** Queries */
+            queries: string[];
+            /** Result Count */
+            result_count: number;
+            /**
+             * Searched At
+             * Format: date-time
+             */
+            searched_at: string;
+        };
+        /**
+         * VideoSearchRequest
+         * @description Find videos for a topic, or find them again.
+         */
+        VideoSearchRequest: {
+            /**
+             * Refresh
+             * @description Search again although the topic already has suggestions. The new results replace them when the search finishes.
+             * @default false
+             */
+            refresh: boolean;
         };
         /** WorkedExample */
         WorkedExample: {
@@ -6360,6 +6498,147 @@ export interface operations {
                 };
             };
             /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_videos_v1_roadmap_items__item_id__videos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicVideos"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_video_search_v1_roadmap_items__item_id__videos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Send the same value when resubmitting a form: you get the same job back. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VideoSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJob"];
+                };
+            };
+            /** @description Missing, invalid or expired access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such topic for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Revision sessions don't have videos */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Today's limit of video searches */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Video suggestions aren't configured */
             503: {
                 headers: {
                     [name: string]: unknown;
