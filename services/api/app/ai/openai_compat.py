@@ -63,6 +63,11 @@ _TOO_LARGE_RE = re.compile(r"context[ _-]?(?:length|window)|reduce the length|pr
 _THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE)
 _FENCE_RE = re.compile(r"^```[A-Za-z0-9_-]*\s*\n?|\n?```\s*$")
 _FORMAT_WORDS = ("response_format", "json_schema", "json_object", "structured", "guided_json")
+# Response formats, the most demanding first.
+_FORMAT_ORDER: tuple[JsonMode, ...] = ("schema", "object", "none")
+_DECODER = json.JSONDecoder()
+# How many opening braces extract_json tries before it gives up looking for the answer.
+_MAX_OBJECT_STARTS = 50
 
 _ANSWER_FORMAT = """
 
@@ -139,7 +144,9 @@ class OpenAICompatibleProvider:
                     raise
                 log.warning("openai_compat.format_refused", provider=self.name, model=model)
                 mode = lower
-                self._mode[model] = lower
+                # Calls run concurrently: a slow refusal of an earlier format must not undo a
+                # step further down that another call has already found.
+                self._mode[model] = _least_demanding(self._mode.get(model), lower)
         payload = _payload(response)
         text, finish_reason = _text_and_finish_reason(payload)
         return _parse(text, schema), payload, finish_reason
@@ -273,6 +280,12 @@ def _retry_delay(response: httpx2.Response, detail: str) -> float | None:
     return seconds or None
 
 
+def _least_demanding(current: JsonMode | None, lower: JsonMode) -> JsonMode:
+    if current is None or _FORMAT_ORDER.index(lower) > _FORMAT_ORDER.index(current):
+        return lower
+    return current
+
+
 def _step_down(mode: JsonMode, detail: str) -> JsonMode | None:
     """The next less demanding response format, if ``detail`` says the format was the problem."""
     if mode == "none" or not any(word in detail.casefold() for word in _FORMAT_WORDS):
@@ -324,8 +337,25 @@ def extract_json(text: str) -> str:
     """The JSON object inside a model's reply: no reasoning blocks, fences or surrounding prose."""
     cleaned = _THINK_RE.sub("", text).strip()
     cleaned = _FENCE_RE.sub("", cleaned).strip()
-    start, end = cleaned.find("{"), cleaned.rfind("}")
-    return cleaned[start : end + 1] if 0 <= start < end else cleaned
+    first, last = cleaned.find("{"), cleaned.rfind("}")
+    if not 0 <= first < last:
+        return cleaned
+    # Prose around the answer may have braces of its own. An object that starts at the first
+    # brace, or ends at the last one, is the answer; anything else (say, an object nested in a
+    # malformed answer) is not, and the whole span is passed on so its JSON error is reported.
+    start = first
+    for _ in range(_MAX_OBJECT_STARTS):
+        try:
+            value, end = _DECODER.raw_decode(cleaned, start)
+        except ValueError:
+            pass
+        else:
+            if isinstance(value, dict) and (start == first or end == last + 1):
+                return cleaned[start:end]
+        start = cleaned.find("{", start + 1)
+        if start < 0:
+            break
+    return cleaned[first : last + 1]
 
 
 def _parse[T: BaseModel](text: str, schema: type[T]) -> T:

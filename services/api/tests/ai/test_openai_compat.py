@@ -1,7 +1,8 @@
 """The OpenAI-compatible adapter, against a mock HTTP transport (no network, no real key)."""
 
+import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from typing import Any
@@ -32,6 +33,7 @@ KEY = "test-key-not-a-real-secret-123"
 URL = "https://llm.test/v1/chat/completions"
 
 Handler = Callable[[httpx2.Request], httpx2.Response]
+AsyncHandler = Callable[[httpx2.Request], Coroutine[None, None, httpx2.Response]]
 
 
 class Answer(BaseModel):
@@ -56,7 +58,7 @@ class Clock:
 
 
 def make_provider(
-    handler: Handler,
+    handler: Handler | AsyncHandler,
     *,
     models: tuple[str, ...] = ("model-a",),
     json_mode: JsonMode = "object",
@@ -230,6 +232,8 @@ async def test_providers_that_report_a_normal_finish_differently_are_accepted(
         '<think>I should say 3, no, 2.</think>\n{"name": "ok", "count": 2}',
         '<thinking>{"name": "decoy", "count": 9}</thinking>{"name": "ok", "count": 2}',
         'Here is the plan:\n{"name": "ok", "count": 2}\nHope that helps!',
+        'A plan for {topic}:\n{"name": "ok", "count": 2}',
+        '{"name": "ok", "count": 2}\nChange {count} if you like.',
         [{"type": "text", "text": '{"name": "ok", '}, {"type": "text", "text": '"count": 2}'}],
     ],
 )
@@ -239,6 +243,13 @@ async def test_the_json_object_is_found_inside_the_ways_models_wrap_it(content: 
 
 def test_extract_json_leaves_text_without_an_object_alone() -> None:
     assert extract_json("no braces here") == "no braces here"
+
+
+def test_a_malformed_answer_is_passed_on_whole_so_its_own_error_is_reported() -> None:
+    # Not the valid object nested inside it, which would hide the real mistake.
+    malformed = '{"name": "ok", "inner": {"a": 1},}'
+
+    assert extract_json(malformed) == malformed
 
 
 # --- A bad answer ----------------------------------------------------------------------------
@@ -481,6 +492,36 @@ async def test_a_refused_response_format_steps_down_and_is_remembered() -> None:
     # schema -> object -> none for the first call; the second goes straight to none.
     assert kinds == ["json_schema", "json_object", None, None]
     assert "ANSWER FORMAT" in bodies[1]["messages"][0]["content"]
+
+
+async def test_a_slow_refusal_never_undoes_a_step_further_down() -> None:
+    kinds: list[str | None] = []
+    slow_sent, release_slow, slow_retrying, release_retry = (asyncio.Event() for _ in range(4))
+
+    async def handler(request: httpx2.Request) -> httpx2.Response:
+        kind = json.loads(request.content).get("response_format", {}).get("type")
+        kinds.append(kind)
+        if len(kinds) == 1:  # the slow call's first request: its refusal arrives last
+            slow_sent.set()
+            await release_slow.wait()
+        elif len(kinds) == 5:  # the slow call's second try, one format down
+            slow_retrying.set()
+            await release_retry.wait()
+        if kind is not None:
+            return httpx2.Response(400, json={"error": {"message": f"{kind} is not supported"}})
+        return httpx2.Response(200, json=completion())
+
+    provider = make_provider(handler, json_mode="schema")
+    slow = asyncio.create_task(provider.generate_structured(REQUEST, Answer))
+    await slow_sent.wait()
+    await provider.generate_structured(REQUEST, Answer)  # schema, object, then no format
+    release_slow.set()
+    await slow_retrying.wait()
+    await provider.generate_structured(REQUEST, Answer)
+    release_retry.set()
+    await slow
+
+    assert kinds[5] is None  # the third call went straight to no format
 
 
 async def test_a_rejection_that_is_not_about_the_format_is_not_retried() -> None:
