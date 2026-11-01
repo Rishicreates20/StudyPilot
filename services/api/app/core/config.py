@@ -141,6 +141,18 @@ class Settings(BaseSettings):
     # Searches a learner may run per rolling hour: each embeds one short query with the provider.
     document_searches_per_user_per_hour: int = Field(default=120, ge=1, le=5000)
 
+    # --- Exports: PDF notes, revision sheets, roadmaps and slides (ADR-049) -------------------
+    # Stored in a second private bucket, through the same store as documents (DOCUMENT_STORAGE).
+    # Must name the bucket the exports migration creates: the web download route only follows
+    # signed links into `exports`, so another name fails closed (downloads answer 502).
+    export_bucket: str = Field(default="exports", pattern=r"^[a-z0-9][a-z0-9_-]{1,62}$")
+    # Only for DOCUMENT_STORAGE=local.
+    export_local_dir: str = Field(default=".data/exports", min_length=1, max_length=300)
+    # How long a download link stays valid. Short: the browser follows it at once.
+    export_download_seconds: int = Field(default=120, ge=30, le=3600)
+    # Export jobs one learner may start per rolling 24 hours (each renders a file).
+    export_jobs_per_user_per_day: int = Field(default=40, ge=1, le=1000)
+
     # --- AI provider (used by the worker; the API only checks that it is configured) -----------
     llm_provider: LlmProviderName | None = None
     # A secret: server-only, never logged, never sent to the browser.

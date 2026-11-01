@@ -119,3 +119,14 @@ def test_the_scoring_rules_are_pure() -> None:
     for path in python_files("learning"):
         modules = imported_modules(path)
         assert not any(module.startswith(forbidden) for module in modules), path
+
+
+def test_the_export_renderers_are_pure() -> None:
+    """Rendering a PDF or a deck reads no database, storage or network: only the data it is given.
+    ``app/exports/files.py`` is the one module there that talks to storage."""
+    forbidden = ("psycopg", "app.core.db", "app.repositories", "app.jobs", "fastapi", "httpx")
+    renderers = [path for path in python_files("exports") if path.name != "files.py"]
+    assert renderers
+    for path in renderers:
+        modules = imported_modules(path)
+        assert not any(module.startswith(forbidden) for module in modules), path

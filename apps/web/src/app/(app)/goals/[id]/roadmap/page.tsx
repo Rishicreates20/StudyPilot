@@ -7,6 +7,7 @@ import { Suspense } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { NoticeBanner } from "@/components/feedback/notice-banner";
+import { ExportPanel } from "@/components/exports/export-panel";
 import { PageContainer, PageHeader } from "@/components/layout/page";
 import { RegenerateDialog } from "@/components/roadmap/regenerate-dialog";
 import { RoadmapView } from "@/components/roadmap/roadmap-view";
@@ -175,6 +176,14 @@ async function RoadmapContent({ params, searchParams }: RoadmapPageProps) {
       ) : null}
 
       <RoadmapView roadmap={roadmap} goalId={goal.id} />
+
+      <ExportPanel
+        goalId={goal.id}
+        kind="roadmap"
+        sourceId={roadmap.id}
+        returnTo={roadmapPath(goal.id)}
+        readOnly={archived}
+      />
 
       <VersionHistory
         goalId={goal.id}
