@@ -18,6 +18,7 @@ from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.core.config import Settings
 from app.core.db import Database
 from app.documents.storage import build_document_files
+from app.exports.files import build_export_files
 from app.jobs.runtime import WorkerEnv
 
 log = structlog.get_logger("app.worker")
@@ -48,6 +49,7 @@ async def worker_environment(settings: Settings) -> AsyncGenerator[WorkerEnv]:
                 worker_id=new_worker_id(),
                 provider=provider,
                 files=build_document_files(settings, client),
+                export_files=build_export_files(settings, client),
             )
     finally:
         await database.close()

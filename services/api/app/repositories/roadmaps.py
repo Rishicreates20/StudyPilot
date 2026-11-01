@@ -8,7 +8,7 @@ that one column.
 from collections import defaultdict
 from uuid import UUID
 
-from app.core.db import UserConnection
+from app.core.db import ReadConnection, UserConnection
 from app.repositories import lessons as lessons_repo
 from app.schemas.roadmaps import (
     Objective,
@@ -69,7 +69,7 @@ async def get_current_id(connection: UserConnection, user_id: UUID, goal_id: UUI
     return row["id"] if row else None
 
 
-async def get_detail(connection: UserConnection, user_id: UUID, roadmap_id: UUID) -> Roadmap | None:
+async def get_detail(connection: ReadConnection, user_id: UUID, roadmap_id: UUID) -> Roadmap | None:
     cursor = await connection.execute(
         f"select r.*, {_COMPLETED_TOPICS} from public.roadmaps r"  # noqa: S608
         " where r.id = %s and r.user_id = %s",

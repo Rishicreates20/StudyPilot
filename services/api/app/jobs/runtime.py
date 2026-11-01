@@ -21,6 +21,7 @@ from app.ai.provider import LLMProvider
 from app.core.config import Settings
 from app.core.db import Database
 from app.documents.storage import DocumentFiles
+from app.exports.files import ExportFiles
 from app.jobs import queue
 from app.jobs.errors import JobCancelled, LeaseLost
 from app.jobs.queue import Job
@@ -40,6 +41,8 @@ class WorkerEnv:
     provider: LLMProvider | None
     # Where uploaded files live; None when storage isn't configured (document jobs then fail).
     files: DocumentFiles | None = None
+    # Where exported files go; None when storage isn't configured (export jobs then fail).
+    export_files: ExportFiles | None = None
     today: Callable[[], date] = today_utc
     random: Callable[[], float] = field(default=random.random)
     # Waiting inside a job (for a rate limit to ease); tests replace it so they do not really wait.
