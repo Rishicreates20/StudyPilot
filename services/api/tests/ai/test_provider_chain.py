@@ -16,6 +16,7 @@ from app.ai.provider import (
     LLMQuotaExhausted,
     LLMRateLimited,
     LLMRejected,
+    LLMRequestTooLarge,
     LLMTimeout,
     LLMTruncated,
     LLMUnavailable,
@@ -212,6 +213,19 @@ async def test_a_wrongly_set_up_fallback_does_not_stop_the_next_one_answering() 
     chain = ProviderChain(main, [broken, working])
 
     assert (await ask(chain)).provider == "working"
+
+
+async def test_a_fallback_that_finds_a_request_too_long_is_skipped_not_rested() -> None:
+    main = Scripted("gemini", quota(5))
+    small = Scripted("small", LLMRequestTooLarge("context length"), "a shorter request fits")
+    chain = ProviderChain(main, [small])
+
+    with pytest.raises(LLMQuotaExhausted) as raised:
+        await ask(chain)
+
+    # The learner hears when Gemini is back, as without a fallback; the next request asks again.
+    assert raised.value.retry_after == 5 * 3600
+    assert (await ask(chain)).provider == "small"
 
 
 async def test_a_fallback_that_answers_badly_is_not_rested_and_the_next_gets_a_try() -> None:

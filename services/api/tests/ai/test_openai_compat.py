@@ -2,6 +2,8 @@
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from typing import Any
 
 import httpx2
@@ -17,6 +19,7 @@ from app.ai.provider import (
     LLMQuotaExhausted,
     LLMRateLimited,
     LLMRejected,
+    LLMRequestTooLarge,
     LLMTimeout,
     LLMTruncated,
     LLMUnavailable,
@@ -341,6 +344,17 @@ async def test_a_reply_that_is_not_json_is_unavailable() -> None:
         (503, {"detail": "overloaded"}, LLMUnavailable),
         (400, {"error": {"message": "max_tokens is too large"}}, LLMRejected),
         (404, {"error": {"message": "The model does not exist"}}, LLMRejected),
+        (413, {"error": {"message": "Request too large for model"}}, LLMRequestTooLarge),
+        (
+            400,
+            {"error": {"code": "context_length_exceeded", "message": "maximum context length"}},
+            LLMRequestTooLarge,
+        ),
+        (
+            400,
+            {"error": {"message": "Please reduce the length of the messages or completion."}},
+            LLMRequestTooLarge,
+        ),
         (429, {"error": {"message": "Too many requests, slow down"}}, LLMRateLimited),
         (
             429,
@@ -373,6 +387,26 @@ async def test_retry_after_is_passed_on_in_seconds() -> None:
         await call(handler)
 
     assert raised.value.retry_after == 17
+
+
+async def test_retry_after_given_as_an_http_date_is_turned_into_seconds() -> None:
+    when = format_datetime(datetime.now(UTC) + timedelta(seconds=120), usegmt=True)
+    handler = respond(429, {"error": {"message": "slow down"}}, headers={"retry-after": when})
+
+    with pytest.raises(LLMRateLimited) as raised:
+        await call(handler)
+
+    assert raised.value.retry_after == pytest.approx(120, abs=5)
+
+
+async def test_an_output_limit_the_model_cannot_give_is_a_setup_fault() -> None:
+    message = "max_tokens is too large: 16000. This model supports at most 8192 tokens"
+    body = {"error": {"message": message}}
+
+    with pytest.raises(LLMRejected) as raised:
+        await call(respond(400, body))
+
+    assert not isinstance(raised.value, LLMRequestTooLarge)
 
 
 @pytest.mark.parametrize(
@@ -503,6 +537,24 @@ async def test_a_model_that_is_set_up_wrongly_is_skipped_for_an_hour() -> None:
     await provider.generate_structured(REQUEST, Answer)
 
     assert asked == ["typo-model", "model-b", "model-b", "typo-model", "model-b"]
+
+
+async def test_a_model_that_finds_a_request_too_long_is_passed_over_but_not_rested() -> None:
+    asked: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        model = json.loads(request.content)["model"]
+        asked.append(model)
+        if model == "small-model":
+            error = {"code": "context_length_exceeded", "message": "maximum context length is 8192"}
+            return httpx2.Response(400, json={"error": error})
+        return httpx2.Response(200, json=completion(model="large-model"))
+
+    provider = make_provider(handler, models=("small-model", "large-model"))
+    await provider.generate_structured(REQUEST, Answer)
+    await provider.generate_structured(REQUEST, Answer)
+
+    assert asked == ["small-model", "large-model", "small-model", "large-model"]
 
 
 async def test_when_every_model_is_spent_the_one_that_clears_first_is_reported() -> None:

@@ -17,6 +17,7 @@ from app.ai.provider import (
     LLMQuotaExhausted,
     LLMRateLimited,
     LLMRejected,
+    LLMRequestTooLarge,
     LLMTimeout,
     LLMUnavailable,
 )
@@ -89,11 +90,13 @@ class Bench:
         """The result of the first candidate that can answer, and its name.
 
         A candidate that is out of allowance, rate limited, overloaded, or set up wrongly rests and
-        the next is tried. Any other error is the caller's to handle and passes through. When
-        nobody can answer, ``soonest`` of the busy reasons (``earlier`` ones included) is raised;
-        if the only reasons are configuration problems, the first of them is.
+        the next is tried; one that finds this request too long is passed over without resting.
+        Any other error is the caller's to handle and passes through. When nobody can answer,
+        ``soonest`` of the busy reasons (``earlier`` ones included) is raised; failing that the
+        first "too long", and if the only reasons are configuration problems, the first of them.
         """
         busy: list[tuple[float, LLMError]] = list(earlier)
+        too_large: list[LLMError] = []
         misconfigured: list[LLMError] = []
         for name in names:
             resting = self.resting(name)
@@ -108,11 +111,15 @@ class Bench:
                 return await attempt(name), name
             except BUSY as exc:
                 busy.append((self.rest(name, exc), exc))
+            except LLMRequestTooLarge as exc:  # before MISCONFIGURED: it is an LLMRejected
+                too_large.append(exc)
             except MISCONFIGURED as exc:
                 self.rest(name, exc)
                 misconfigured.append(exc)
         if busy:
             raise soonest(busy)
+        if too_large:
+            raise too_large[0]
         if misconfigured:
             raise misconfigured[0]
         raise LLMUnavailable("no candidate was available")

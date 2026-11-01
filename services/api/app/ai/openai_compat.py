@@ -19,6 +19,8 @@ import json
 import re
 import time
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, cast
 
 import httpx2
@@ -34,6 +36,7 @@ from app.ai.provider import (
     LLMQuotaExhausted,
     LLMRateLimited,
     LLMRejected,
+    LLMRequestTooLarge,
     LLMTimeout,
     LLMTruncated,
     LLMUnavailable,
@@ -53,6 +56,10 @@ _DAILY_RE = re.compile(r"per[ -]day|daily|\brpd\b|\btpd\b|insufficient_quota|exc
 # "Please try again in 7m12.5s" / "in 2h3m" / "in 30s".
 _RETRY_IN_RE = re.compile(r"try again in\s+((?:\d+(?:\.\d+)?[hms]\s*)+)", re.IGNORECASE)
 _DURATION_PART_RE = re.compile(r"(\d+(?:\.\d+)?)([hms])")
+# A request longer than the model's context window ("maximum context length", Groq's and
+# Cerebras' "reduce the length of the messages", "prompt is too long"). Not "max_tokens is too
+# large": that is the entry's output limit, wrong for every request.
+_TOO_LARGE_RE = re.compile(r"context[ _-]?(?:length|window)|reduce the length|prompt is too long")
 _THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE)
 _FENCE_RE = re.compile(r"^```[A-Za-z0-9_-]*\s*\n?|\n?```\s*$")
 _FORMAT_WORDS = ("response_format", "json_schema", "json_object", "structured", "guided_json")
@@ -204,6 +211,10 @@ def _raise_for_status(response: httpx2.Response) -> None:
         # and the provider must not rest for an hour as if its key or model were wrong. The
         # rejected answer (``failed_generation``) is never read.
         raise LLMInvalidOutput(detail)
+    if status == 413 or _TOO_LARGE_RE.search(detail.casefold()):
+        # Too long for this model, this time: a shorter request, or a model with a larger window,
+        # may be fine, so it must not rest for an hour as if it were set up wrongly.
+        raise LLMRequestTooLarge(detail)
     raise LLMRejected(detail)
 
 
@@ -241,10 +252,18 @@ def _error_detail(response: httpx2.Response) -> str:
 
 def _retry_delay(response: httpx2.Response, detail: str) -> float | None:
     """How long the provider says to wait: ``Retry-After``, or "try again in 7m12s" in the text."""
+    header = response.headers.get("retry-after", "").strip()
     try:
-        return max(0.0, float(response.headers.get("retry-after", "")))
+        return max(0.0, float(header))
     except ValueError:
         pass
+    try:  # Retry-After may also be an HTTP date
+        until = parsedate_to_datetime(header)
+    except TypeError, ValueError:
+        until = None
+    if until is not None:
+        until = until if until.tzinfo else until.replace(tzinfo=UTC)
+        return max(0.0, (until - datetime.now(UTC)).total_seconds())
     found = _RETRY_IN_RE.search(detail)
     if found is None:
         return None

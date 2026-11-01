@@ -15,6 +15,7 @@ main configuration stays loud instead of being papered over.
 
 A fallback that is set up wrongly (a rejected key, an unknown model) rests for an hour and is
 reported in the server log, never to the learner: it must not make things worse than having none.
+One that finds a request longer than its context window is only passed over for that request.
 A fallback that answers badly (malformed, cut off, blocked) is not resting; the next one is tried,
 and if none does better that answer's error goes to the caller, who may ask for a repair.
 """
@@ -36,6 +37,7 @@ from app.ai.provider import (
     LLMProvider,
     LLMQuotaExhausted,
     LLMRateLimited,
+    LLMRequestTooLarge,
     LLMTruncated,
     LLMUnavailable,
     OcrResult,
@@ -96,6 +98,8 @@ class ProviderChain:
                 result = await fallback.generate_structured(request, schema)
             except BUSY as exc:
                 busy.append((self._bench.rest(name, exc), exc))
+                continue
+            except LLMRequestTooLarge:  # too long for this one, this time: not resting
                 continue
             except MISCONFIGURED as exc:
                 self._bench.rest(name, exc)

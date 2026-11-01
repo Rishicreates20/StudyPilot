@@ -141,6 +141,14 @@ class LLMRejected(LLMError):
     user_message = "The AI provider refused the request."
 
 
+class LLMRequestTooLarge(LLMRejected):
+    """Refused for *this* request's size: the prompt is over the model's context window.
+
+    Another model, with a larger window, may well take it, and the same model takes shorter
+    requests, so a candidate that says this is not set up wrongly and is not rested.
+    """
+
+
 class LLMBlocked(LLMError):
     code = "AI_CONTENT_BLOCKED"
     user_message = "The AI provider declined to produce a plan for this goal."
