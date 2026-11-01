@@ -7,6 +7,7 @@ from app.core.db import Database
 from app.core.errors import ServiceUnavailableError
 from app.core.rate_limit import SlidingWindowLimiter
 from app.documents.storage import DocumentFiles
+from app.exports.files import ExportFiles
 
 
 def get_database(request: Request) -> Database:
@@ -26,6 +27,11 @@ def get_files(request: Request) -> DocumentFiles | None:
     return request.app.state.files
 
 
+def get_export_files(request: Request) -> ExportFiles | None:
+    """The store for exported files, or None when storage isn't set up (exports are refused)."""
+    return request.app.state.export_files
+
+
 def get_provider(request: Request) -> LLMProvider | None:
     """The model provider the API uses for one thing only: embedding a search question."""
     return request.app.state.provider
@@ -36,5 +42,6 @@ def get_search_limiter(request: Request) -> SlidingWindowLimiter:
 
 
 FilesDep = Annotated[DocumentFiles | None, Depends(get_files)]
+ExportFilesDep = Annotated[ExportFiles | None, Depends(get_export_files)]
 ProviderDep = Annotated[LLMProvider | None, Depends(get_provider)]
 SearchLimiterDep = Annotated[SlidingWindowLimiter, Depends(get_search_limiter)]
