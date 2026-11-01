@@ -15,7 +15,7 @@ from app.ai.gemini import GeminiProvider
 from app.core.config import format_config_errors
 from support.settings import valid_local_settings
 
-API_KEY = "nvapi-this-is-a-secret-key-1234567890"
+API_KEY = "nvapi-0000-fake-0000-fake-0000"
 
 
 def entry(**fields: Any) -> dict[str, Any]:

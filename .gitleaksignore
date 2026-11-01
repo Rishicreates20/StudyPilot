@@ -1,0 +1,5 @@
+# Findings gitleaks reports that are not secrets. One fingerprint per line (commit:file:rule:line).
+# Add an entry only after checking the value by eye; a real key is revoked, never listed here.
+
+# A made-up placeholder ("nvapi-this-is-a-secret-key-…") in a test; replaced in a later commit.
+fbeaa81f5913e19b78379a34fd90b443430e4758:services/api/tests/test_ai_fallback_settings.py:generic-api-key:18
