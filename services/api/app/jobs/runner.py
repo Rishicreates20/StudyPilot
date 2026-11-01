@@ -22,6 +22,7 @@ from app.jobs.queue import Job
 from app.jobs.quiz_job import run_quiz
 from app.jobs.roadmap_job import run_roadmap
 from app.jobs.runtime import Lease, WorkerEnv, backoff_seconds
+from app.jobs.videos_job import run_videos
 
 log = structlog.get_logger("app.jobs")
 
@@ -42,9 +43,11 @@ async def process_job(env: WorkerEnv, job: Job) -> None:
                 await run_export(env, job, lease)
             elif job.job_type == "roadmap":
                 await run_roadmap(env, job, lease)
+            elif job.job_type == "resources":
+                await run_videos(env, job, lease)
             else:
-                # A kind the database allows but this worker cannot run (for example `resources`,
-                # whose code is not in this repository). Never fall through to another runner.
+                # A kind the database allows but this worker cannot run. Never fall through to
+                # another runner.
                 raise JobFailure(
                     "JOB_TYPE_UNSUPPORTED", "This kind of job isn't supported on this server yet."
                 )

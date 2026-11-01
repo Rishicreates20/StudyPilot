@@ -22,11 +22,12 @@ import { LessonVersions } from "@/components/lesson/lesson-versions";
 import { NewVersionDialog } from "@/components/lesson/new-version-dialog";
 import { TopicNavigation } from "@/components/lesson/topic-navigation";
 import { TopicAssessment } from "@/components/quiz/topic-assessment";
+import { TopicVideos } from "@/components/videos/topic-videos";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { callApi } from "@/lib/api/call";
-import { ApiError, fetchAssessment, fetchMe, fetchStudy } from "@/lib/api/server";
+import { ApiError, fetchAssessment, fetchMe, fetchStudy, fetchTopicVideos } from "@/lib/api/server";
 import { requireApiSession } from "@/lib/auth/session";
 import { isGoalId } from "@/lib/goals/ids";
 import { generateLessonAction, retryLessonAction } from "@/lib/lessons/actions";
@@ -81,10 +82,15 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
   if (view.topic.goal_id !== id) notFound();
 
   const { topic, roadmap } = view;
-  // Revision sessions have no lesson and so no quiz; for the rest the card is secondary to the
-  // lesson, so a failure to load it hides the card instead of the page.
-  const assessment =
-    topic.kind === "revision" ? null : await loadAssessment(itemId, studyPath(id, itemId));
+  // Revision sessions have no lesson, quiz or videos; for the rest these cards are secondary to
+  // the lesson, so a failure to load one hides that card instead of the page.
+  const [assessment, videos] =
+    topic.kind === "revision"
+      ? [null, null]
+      : await Promise.all([
+          loadAssessment(itemId, studyPath(id, itemId)),
+          loadVideos(itemId, studyPath(id, itemId)),
+        ]);
   const state = studyPanelState(view);
   const archived = view.goal_archived;
   const roadmapLink = roadmapPath(id, roadmap.status === "current" ? undefined : roadmap.version);
@@ -245,6 +251,9 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
               timeZone={me.timezone}
             />
           ) : null}
+          {videos ? (
+            <TopicVideos goalId={id} itemId={itemId} data={videos} timeZone={me.timezone} />
+          ) : null}
           <LessonVersions
             goalId={id}
             itemId={itemId}
@@ -261,7 +270,12 @@ async function StudyContent({ params, searchParams }: StudyPageProps) {
           />
         </>
       ) : (
-        <TopicNavigation goalId={id} previous={view.previous} next={view.next} />
+        <>
+          {videos ? (
+            <TopicVideos goalId={id} itemId={itemId} data={videos} timeZone={me.timezone} />
+          ) : null}
+          <TopicNavigation goalId={id} previous={view.previous} next={view.next} />
+        </>
       )}
     </div>
   );
@@ -271,6 +285,16 @@ async function loadAssessment(itemId: string, returnTo: string) {
   const { accessToken } = await requireApiSession(returnTo);
   try {
     return await fetchAssessment(accessToken, itemId);
+  } catch (error) {
+    if (error instanceof ApiError) return null;
+    throw error;
+  }
+}
+
+async function loadVideos(itemId: string, returnTo: string) {
+  const { accessToken } = await requireApiSession(returnTo);
+  try {
+    return await fetchTopicVideos(accessToken, itemId);
   } catch (error) {
     if (error instanceof ApiError) return null;
     throw error;

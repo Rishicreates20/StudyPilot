@@ -716,6 +716,35 @@ export function deleteExport(accessToken: string, exportId: string): Promise<voi
   );
 }
 
+// --- Study videos (found on YouTube by the worker, ADR-051) --------------------------------------
+
+export type TopicVideos = components["schemas"]["TopicVideos"];
+export type TopicVideo = components["schemas"]["TopicVideo"];
+export type VideoSearchInfo = components["schemas"]["VideoSearchInfo"];
+
+/** A topic's suggested videos, the search behind them and the newest search job. */
+export function fetchTopicVideos(accessToken: string, itemId: string): Promise<TopicVideos> {
+  return call(() =>
+    client(accessToken).GET("/v1/roadmap-items/{item_id}/videos", {
+      params: { path: { item_id: itemId } },
+    }),
+  );
+}
+
+/** Queue a video search for a topic (`refresh` replaces its current suggestions). 202: the job. */
+export function startVideoSearch(
+  accessToken: string,
+  itemId: string,
+  refresh: boolean,
+): Promise<GenerationJob> {
+  return call(() =>
+    client(accessToken).POST("/v1/roadmap-items/{item_id}/videos", {
+      params: { path: { item_id: itemId } },
+      body: { refresh },
+    }),
+  );
+}
+
 /** The bytes of a ready export, through the API (used when there is no signed link). */
 export async function downloadExportFile(accessToken: string, exportId: string): Promise<Response> {
   const url = new URL(`/v1/exports/${exportId}/file`, getServerEnv().API_INTERNAL_BASE_URL);

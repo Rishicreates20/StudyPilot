@@ -19,7 +19,7 @@ Written 2026-10-23 from the review sessions of 2026-10-12 and a fresh look at th
 | CI on `c485854` and `7078fef` | All 5 jobs green | Read from the public GitHub Actions API |
 | M6 documents | Built, pulled on 2026-10-23 | After the pull: web 980/980, API 1929 passed / 1 skipped, ruff/`tsc`/ESLint clean, production build and contract check passed; CI green on `318a07d` (all 5 jobs). Upload code reviewed for security, no code-level holes found |
 | AI provider bench (PR #1) | Merged, pulled | Tests pass; not otherwise reviewed |
-| Resources (YouTube) and exports migrations | **Schema only**: tables exist, no code | Recovered into the repo in `50d4e59`; see the notes in `IMPLEMENTATION_PLAN.md` under M7 and M8 |
+| Resources (YouTube) and exports migrations | Recovered into the repo in `50d4e59`; both now have code (exports ADR-049; YouTube videos ADR-051, 2026-11-01, not yet run against the live YouTube API) | See the notes in `IMPLEMENTATION_PLAN.md` under M7 and M8 |
 | Web app on `:3000` | Running now | Public pages answer 200; `/status` correctly reports the API as unreachable |
 | API and worker | **Not running** | `DATABASE_URL` is empty in `services/api/.env` |
 

@@ -93,6 +93,21 @@ const NOTICES: Readonly<Record<string, Notice>> = {
     title: "Restore the goal first",
     message: "An archived goal is read-only, so its roadmap can't be changed.",
   },
+  "videos-exist": {
+    variant: "info",
+    title: "This topic already has video suggestions",
+    message: "They are shown below. Use “Find other videos” to search again.",
+  },
+  "videos-limit": {
+    variant: "warning",
+    title: "Daily video search limit reached",
+    message: "You have used today's video searches. Please try again tomorrow.",
+  },
+  "videos-unavailable": {
+    variant: "warning",
+    title: "Video suggestions aren't set up yet",
+    message: "This server has no YouTube access configured, so nothing was searched.",
+  },
   "lesson-exists": {
     variant: "info",
     title: "This topic already has a lesson",

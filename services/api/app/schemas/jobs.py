@@ -7,8 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
-# `resources` exists in the database (the recovered resources migration) but nothing in this
-# repository creates or runs it yet; it is listed so such a row can still be shown.
+# `resources` is a search for a topic's study videos (ADR-051).
 JobType = Literal["roadmap", "lesson", "quiz", "grade", "document", "export", "resources"]
 
 
@@ -18,7 +17,7 @@ class GenerationJob(BaseModel):
     id: UUID
     goal_id: UUID
     job_type: JobType
-    # The roadmap topic a lesson job is writing for; None for roadmap jobs.
+    # The roadmap topic a lesson, quiz or video search job works on; None for roadmap jobs.
     item_id: UUID | None
     # The quiz attempt a grading job marks; None for every other kind of job.
     attempt_id: UUID | None

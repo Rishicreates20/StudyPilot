@@ -14,6 +14,7 @@ from app.schemas.roadmaps import RoadmapRequest
 from app.services import lessons as lessons_service
 from app.services import quizzes as quizzes_service
 from app.services import roadmaps as roadmaps_service
+from app.services import videos as videos_service
 
 log = structlog.get_logger("app.jobs")
 
@@ -53,6 +54,8 @@ async def retry_job(
         return await lessons_service.retry_job(connection, principal, job, settings=settings)
     if job.job_type == "quiz":
         return await quizzes_service.retry_quiz_job(connection, principal, job, settings=settings)
+    if job.job_type == "resources":
+        return await videos_service.retry_job(connection, principal, job, settings=settings)
     if job.job_type == "grade":
         raise ConflictError("Marking is retried from the quiz results.", code="JOB_NOT_RETRYABLE")
     if job.job_type == "document":

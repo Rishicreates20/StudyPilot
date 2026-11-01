@@ -5296,6 +5296,221 @@
         "title": "TopicProgress",
         "type": "object"
       },
+      "TopicVideo": {
+        "properties": {
+          "channel_title": {
+            "title": "Channel Title",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "language_source": {
+            "enum": [
+              "audio",
+              "metadata",
+              "unknown"
+            ],
+            "title": "Language Source",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "format": "date-time",
+            "title": "Last Verified At",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "relevance_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Relevance Score",
+            "type": "integer"
+          },
+          "score_basis": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Score Basis",
+            "type": "object"
+          },
+          "searched_language": {
+            "title": "Searched Language",
+            "type": "string"
+          },
+          "thumbnail_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Height"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "thumbnail_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Width"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "string"
+          },
+          "view_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "View Count"
+          }
+        },
+        "required": [
+          "id",
+          "video_id",
+          "url",
+          "title",
+          "channel_title",
+          "duration_seconds",
+          "published_at",
+          "language",
+          "language_source",
+          "searched_language",
+          "thumbnail_url",
+          "thumbnail_width",
+          "thumbnail_height",
+          "view_count",
+          "relevance_score",
+          "score_basis",
+          "position",
+          "last_verified_at"
+        ],
+        "title": "TopicVideo",
+        "type": "object"
+      },
+      "TopicVideos": {
+        "description": "A topic's suggested videos, the search they came from, and the newest search job.",
+        "properties": {
+          "can_search": {
+            "title": "Can Search",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoSearchInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "videos": {
+            "items": {
+              "$ref": "#/components/schemas/TopicVideo"
+            },
+            "title": "Videos",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_id",
+          "configured",
+          "can_search",
+          "search",
+          "videos",
+          "job"
+        ],
+        "title": "TopicVideos",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -5334,6 +5549,73 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VideoSearchInfo": {
+        "description": "The search behind a topic's suggestions: what was asked, and what came back.",
+        "properties": {
+          "candidates_seen": {
+            "title": "Candidates Seen",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "last_verified_at": {
+            "format": "date-time",
+            "title": "Last Verified At",
+            "type": "string"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Queries",
+            "type": "array"
+          },
+          "result_count": {
+            "title": "Result Count",
+            "type": "integer"
+          },
+          "searched_at": {
+            "format": "date-time",
+            "title": "Searched At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "queries",
+          "languages",
+          "candidates_seen",
+          "result_count",
+          "searched_at",
+          "last_verified_at"
+        ],
+        "title": "VideoSearchInfo",
+        "type": "object"
+      },
+      "VideoSearchRequest": {
+        "additionalProperties": false,
+        "description": "Find videos for a topic, or find them again.",
+        "properties": {
+          "refresh": {
+            "default": false,
+            "description": "Search again although the topic already has suggestions. The new results replace them when the search finishes.",
+            "title": "Refresh",
+            "type": "boolean"
+          }
+        },
+        "title": "VideoSearchRequest",
         "type": "object"
       },
       "WorkedExample": {
@@ -10288,6 +10570,219 @@
         "summary": "Everything the study page needs for one topic",
         "tags": [
           "lessons"
+        ]
+      }
+    },
+    "/v1/roadmap-items/{item_id}/videos": {
+      "get": {
+        "description": "The videos found for a topic on YouTube, best match first, with the search they came from\nand the newest search job. Revision sessions have none (404).",
+        "operationId": "read_videos_v1_roadmap_items__item_id__videos_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicVideos"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic for this user"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A dependency is temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A topic's suggested study videos",
+        "tags": [
+          "videos"
+        ]
+      },
+      "post": {
+        "description": "Queues a background search and returns it at once (202); poll `GET /v1/jobs/{id}`.\n\nWithout a body the topic's first search is made (409 if it already has suggestions). With\n`refresh`, a new search replaces the current suggestions when it finishes.",
+        "operationId": "start_video_search_v1_roadmap_items__item_id__videos_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Send the same value when resubmitting a form: you get the same job back.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Send the same value when resubmitting a form: you get the same job back.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/VideoSearchRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Missing, invalid or expired access token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such topic for this user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Revision sessions don't have videos"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Today's limit of video searches"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Video suggestions aren't configured"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Find study videos for a topic",
+        "tags": [
+          "videos"
         ]
       }
     },

@@ -29,6 +29,7 @@ from app.documents.storage import build_document_files
 from app.exports.files import build_export_files
 from app.jobs.runtime import WorkerEnv
 from app.jobs.worker import Worker
+from app.videos.youtube import YouTubeClient
 
 log = structlog.get_logger("app.worker")
 
@@ -58,10 +59,23 @@ async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
                 provider=provider,
                 files=build_document_files(settings, client),
                 export_files=build_export_files(settings, client),
+                videos=build_youtube_client(settings, client),
             )
             await Worker(env).run(stop)
     finally:
         await database.close()
+
+
+def build_youtube_client(settings: Settings, client: httpx2.AsyncClient) -> YouTubeClient | None:
+    """The YouTube Data API client, or None when no key is configured (searches then fail)."""
+    if settings.youtube_api_key is None:
+        return None
+    return YouTubeClient(
+        client,
+        api_key=settings.youtube_api_key,
+        base_url=settings.youtube_base_url,
+        timeout_seconds=settings.youtube_timeout_seconds,
+    )
 
 
 def _install_signal_handlers(loop: asyncio.AbstractEventLoop, stop: asyncio.Event) -> None:

@@ -174,6 +174,21 @@ class Settings(BaseSettings):
     llm_max_output_tokens: int = Field(default=24000, ge=1024, le=65536)
     llm_temperature: float = Field(default=0.4, ge=0, le=2)
 
+    # --- Study videos from the YouTube Data API (ADR-051; used by the worker) --------------------
+    # A secret: server-only, never logged, never sent to the browser. Unset switches the video
+    # suggestions off: the study page then says they are not set up, and nothing is queued.
+    youtube_api_key: SecretStr | None = None
+    youtube_base_url: str = "https://www.googleapis.com/youtube/v3"
+    youtube_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    # The API's units this server may spend per Pacific day (YouTube resets its quota at midnight
+    # Pacific Time). A search costs 100 and a details lookup 1; a new project gets 10 000 a day.
+    youtube_daily_units: int = Field(default=9000, ge=100, le=10_000_000)
+    # Videos kept for one topic, and how many a search asks YouTube for before they are checked.
+    youtube_videos_per_topic: int = Field(default=6, ge=1, le=10)
+    youtube_candidates_per_search: int = Field(default=25, ge=5, le=50)
+    # Video searches one learner may start per rolling 24 hours (each spends at least 100 units).
+    video_searches_per_user_per_day: int = Field(default=20, ge=1, le=500)
+
     # --- Background jobs and the worker process ------------------------------------------------
     job_max_attempts: int = Field(default=3, ge=1, le=10)
     # How long a claimed job stays locked without a heartbeat before another worker may take it.
@@ -223,7 +238,9 @@ class Settings(BaseSettings):
             raise ValueError("must not include a path, query or fragment")
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    @field_validator("database_url", "supabase_jwt_secret", "gemini_api_key", mode="before")
+    @field_validator(
+        "database_url", "supabase_jwt_secret", "gemini_api_key", "youtube_api_key", mode="before"
+    )
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
@@ -239,6 +256,14 @@ class Settings(BaseSettings):
         parsed = urlparse(value.strip())
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("must look like https://generativelanguage.googleapis.com/v1beta")
+        return value.strip().rstrip("/")
+
+    @field_validator("youtube_base_url")
+    @classmethod
+    def _validate_youtube_base_url(cls, value: str) -> str:
+        parsed = urlparse(value.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("must look like https://www.googleapis.com/youtube/v3")
         return value.strip().rstrip("/")
 
     @field_validator("database_url")
@@ -329,6 +354,11 @@ class Settings(BaseSettings):
         if self.llm_provider is LlmProviderName.FAKE:
             return True
         return self.llm_provider is LlmProviderName.GEMINI and self.gemini_api_key is not None
+
+    @property
+    def videos_configured(self) -> bool:
+        """Whether study videos can be searched for: a YouTube Data API key is set."""
+        return self.youtube_api_key is not None
 
     @property
     def docs_enabled(self) -> bool:
