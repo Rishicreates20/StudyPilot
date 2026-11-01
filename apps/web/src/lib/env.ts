@@ -46,9 +46,11 @@ function publicSchema(allowDefaults: boolean) {
         blankToUndefined,
         z.string().trim().min(1).max(60).default(DEFAULT_APP_NAME),
       ),
+      // Optional in production: on Vercel the server reaches the API over a service binding
+      // (API_INTERNAL_BASE_URL, injected at runtime only), and the browser never calls the API.
       NEXT_PUBLIC_API_BASE_URL: z.preprocess(
         blankToUndefined,
-        allowDefaults ? httpUrl().default(DEFAULT_API_BASE_URL) : httpUrl(),
+        allowDefaults ? httpUrl().default(DEFAULT_API_BASE_URL) : httpUrl().optional(),
       ),
       NEXT_PUBLIC_SUPABASE_URL: z.preprocess(blankToUndefined, httpUrl().optional()),
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.preprocess(
@@ -79,7 +81,10 @@ function publicSchema(allowDefaults: boolean) {
 }
 
 const serverOnlySchema = z.object({
-  /** Where server-side code reaches the API (for example the Docker service name). */
+  /**
+   * Where server-side code reaches the API: the Docker service name, or the URL a Vercel service
+   * binding injects at runtime. Falls back to NEXT_PUBLIC_API_BASE_URL; one of them is required.
+   */
   API_INTERNAL_BASE_URL: z.preprocess(blankToUndefined, httpUrl().optional()),
 });
 
@@ -116,14 +121,17 @@ export function parseServerEnv(raw: RawEnv, allowDefaults: boolean = !isProducti
     ...(publicResult.success ? [] : issuesOf(publicResult.error)),
     ...(serverResult.success ? [] : issuesOf(serverResult.error)),
   ];
-  if (!publicResult.success || !serverResult.success || issues.length > 0) {
+  const apiBaseUrl =
+    serverResult.data?.API_INTERNAL_BASE_URL ?? publicResult.data?.NEXT_PUBLIC_API_BASE_URL;
+  if (publicResult.success && serverResult.success && apiBaseUrl === undefined) {
+    issues.push(
+      "API_INTERNAL_BASE_URL: is required (or NEXT_PUBLIC_API_BASE_URL), an http(s) URL of the API",
+    );
+  }
+  if (!publicResult.success || !serverResult.success || apiBaseUrl === undefined) {
     throw new EnvValidationError(issues);
   }
-  return {
-    ...publicResult.data,
-    API_INTERNAL_BASE_URL:
-      serverResult.data.API_INTERNAL_BASE_URL ?? publicResult.data.NEXT_PUBLIC_API_BASE_URL,
-  };
+  return { ...publicResult.data, API_INTERNAL_BASE_URL: apiBaseUrl };
 }
 
 /** The Supabase project to authenticate against, or null when auth is not configured. */

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["sin1"],
+  "services": {
+    "web": {
+      "root": "apps/web/",
+      "framework": "nextjs",
+      "installCommand": "cd ../.. && npm ci --no-audit --no-fund",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "api",
+          "format": "url",
+          "env": "API_INTERNAL_BASE_URL"
+        }
+      ]
+    },
+    "api": {
+      "root": "services/api/",
+      "framework": "fastapi",
+      "entrypoint": "app.asgi:app",
+      "functions": {
+        "app/asgi.py": {
+          "maxDuration": 60,
+          "excludeFiles": "{tests/**,scripts/**,.data/**}"
+        }
+      }
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": { "service": "web" } }]
+}

@@ -6,6 +6,7 @@ import structlog
 
 from app.core.db import Database
 from app.core.errors import ConflictError, NotFoundError
+from app.core.job_signals import note_job_queued
 
 log = structlog.get_logger("app.grading")
 
@@ -60,5 +61,6 @@ async def retry_grading(database: Database, *, user_id: UUID, attempt_id: UUID) 
         job = await cursor.fetchone()
         if job is None:
             raise RuntimeError("grading job insert returned no row")
+        note_job_queued()
         log.info("quiz.regrade_requested", attempt_id=str(attempt_id), job_id=str(job["id"]))
         return job["id"]

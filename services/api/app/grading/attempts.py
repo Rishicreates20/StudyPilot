@@ -29,6 +29,7 @@ from psycopg.types.json import Jsonb
 
 from app.core.db import Database, SystemConnection
 from app.core.errors import ConflictError, InvalidRequestError, NotFoundError
+from app.core.job_signals import note_job_queued
 from app.grading.finalize import finalize_attempt
 from app.learning.mastery import MasteryConfig
 
@@ -248,6 +249,7 @@ async def _submit(
             " values (%s, %s, %s, 'grade')",
             (user_id, quiz["goal_id"], attempt_id),
         )
+        note_job_queued()
     else:
         await finalize_attempt(connection, user_id=user_id, attempt_id=attempt_id, config=config)
     log.info("quiz.submitted", attempt_id=str(attempt_id), questions=len(graded), pending=pending)

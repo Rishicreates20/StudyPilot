@@ -11,6 +11,7 @@ These functions use the privileged ``SystemConnection`` and are for the worker o
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -180,6 +181,15 @@ async def mark_cancelled(connection: SystemConnection, job_id: UUID, worker_id: 
         (job_id, worker_id),
     )
     return cursor.rowcount == 1
+
+
+async def next_run_at(connection: SystemConnection) -> datetime | None:
+    """When the soonest queued job may run (now, or later for a retry); None if none is queued."""
+    cursor = await connection.execute(
+        "select min(run_at) as run_at from public.generation_jobs where status = 'queued'"
+    )
+    row = await cursor.fetchone()
+    return None if row is None else row["run_at"]
 
 
 async def reap_expired(connection: SystemConnection) -> list[UUID]:

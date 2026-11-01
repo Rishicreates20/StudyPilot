@@ -12,6 +12,7 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 
 from app.core.db import UserConnection
+from app.core.job_signals import note_job_queued
 from app.schemas.jobs import GenerationJob, JobType
 
 _SELECT = """
@@ -47,6 +48,7 @@ async def insert(
     row = await cursor.fetchone()
     if row is None:
         raise RuntimeError("insert returned no row")
+    note_job_queued()
     job = await get(connection, user_id, row["id"])
     if job is None:
         raise RuntimeError("the new job could not be read back")
