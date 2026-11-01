@@ -10690,11 +10690,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VideoSearchRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/VideoSearchRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {

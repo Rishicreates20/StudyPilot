@@ -69,6 +69,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      # Keep below the quota Google assigned the project (the worker stops at this many units).
+      YOUTUBE_DAILY_UNITS: ${YOUTUBE_DAILY_UNITS:-9000}
     volumes:
       - ./services/api/app:/srv/api/app
     depends_on:

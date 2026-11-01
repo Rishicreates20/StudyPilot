@@ -193,6 +193,14 @@ def test_a_search_is_queued_run_and_shown(
 
 
 @pytest.mark.usefixtures("youtube_on")
+def test_a_first_search_needs_no_body(api: TestClient, owned: dict[str, Any]) -> None:
+    response = api.post(f"/v1/roadmap-items/{owned['item']}/videos", headers=owned["alice"].headers)
+
+    assert response.status_code == 202, response.text
+    assert response.json()["job_type"] == "resources"
+
+
+@pytest.mark.usefixtures("youtube_on")
 def test_a_second_request_while_one_runs_is_a_conflict(
     api: TestClient, owned: dict[str, Any]
 ) -> None:

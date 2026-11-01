@@ -61,11 +61,12 @@ async def read_videos(
 )
 async def start_video_search(
     item_id: UUID,
-    payload: VideoSearchRequest,
     request: Request,
     response: Response,
     principal: CurrentPrincipal,
     database: DatabaseDep,
+    # Optional: a POST with no body at all is a first search.
+    payload: VideoSearchRequest | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> GenerationJob:
     """Queues a background search and returns it at once (202); poll `GET /v1/jobs/{id}`.
@@ -79,7 +80,7 @@ async def start_video_search(
             connection,
             principal,
             item_id,
-            payload,
+            payload or VideoSearchRequest(),
             idempotency_key=idempotency_key,
             settings=settings,
         )

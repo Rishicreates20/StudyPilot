@@ -6578,9 +6578,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["VideoSearchRequest"];
+                "application/json": components["schemas"]["VideoSearchRequest"] | null;
             };
         };
         responses: {
