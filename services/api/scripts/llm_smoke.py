@@ -18,6 +18,11 @@ deliberately partial short answer.
 
 Use it after setting ``LLM_PROVIDER=gemini`` and ``GEMINI_API_KEY`` to check the live path. A real
 call uses a small amount of the provider's quota.
+
+With ``LLM_FALLBACKS`` set, the providers listed there answer only when Gemini cannot, and the
+report names whoever did. To try them on purpose, run once with ``GEMINI_BASE_URL`` pointing at a
+closed local port (for example ``http://127.0.0.1:9``): Gemini is then unavailable and the chain
+asks the fallbacks in order.
 """
 
 import asyncio

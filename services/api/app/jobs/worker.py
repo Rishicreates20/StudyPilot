@@ -59,6 +59,10 @@ class Worker:
             ai_model=self.env.settings.gemini_model
             if provider and provider.name == "gemini"
             else None,
+            # The providers behind it (LLM_FALLBACKS), by the names the operator gave them.
+            ai_fallbacks=[entry.name for entry in self.env.settings.llm_fallback_providers]
+            if provider and provider.name == "gemini"
+            else [],
         )
         tasks = [
             asyncio.create_task(self._consume(stop))

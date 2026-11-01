@@ -93,7 +93,7 @@ docker compose up --build
 | Data and auth | Supabase Auth, PostgreSQL with Row Level Security; pgvector and private Storage *(later)* |
 | API contract | OpenAPI → generated TypeScript types (`packages/contracts`), checked for drift in CI |
 | Background work | One PostgreSQL-backed durable job queue (`FOR UPDATE SKIP LOCKED`, leases, retries) and a worker process |
-| AI | Gemini over its REST API behind an `LLMProvider` interface (a labelled `fake` provider for tests); OpenAI *(planned)* |
+| AI | Gemini over its REST API behind an `LLMProvider` interface (a labelled `fake` provider for tests); optional OpenAI-compatible providers behind it for generation (`LLM_FALLBACKS`, off by default) |
 | Tests | Vitest + Testing Library, pytest against a real PostgreSQL, Playwright |
 | CI | GitHub Actions (API, web, genuine Supabase stack, Docker, secret scan) |
 | Hosting *(planned)* | Vercel (web), Render (API + worker), Supabase (managed) |
