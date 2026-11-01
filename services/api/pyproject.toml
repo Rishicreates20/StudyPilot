@@ -22,6 +22,8 @@ dependencies = [
     "fpdf2==2.8.9",
     "uharfbuzz==0.56.4",
     "python-pptx==1.0.2",
+    # Wakes the worker on Vercel: one message starts a bounded run of jobs (ADR-052). Pure Python.
+    "vercel-queue==0.9.2",
 ]
 
 [dependency-groups]
@@ -35,6 +37,11 @@ dev = [
 [tool.uv]
 # This is an application, not a library: install dependencies only, no build backend.
 package = false
+
+# Vercel imports this module at build time and turns its @subscribe handler into a private,
+# queue-triggered function that runs jobs (ADR-052). Ignored everywhere else.
+[[tool.vercel.subscribers]]
+entrypoint = "app.jobs.queue_consumer"
 
 [tool.ruff]
 line-length = 100

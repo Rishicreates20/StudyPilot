@@ -10,58 +10,19 @@ loop, which ``main`` selects, because psycopg's async mode rejects the default p
 """
 
 import asyncio
-import os
 import signal
-import socket
 import sys
-import uuid
 from types import FrameType
 
-import httpx2
-import structlog
-
-from app.ai.factory import build_provider
-from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.core.config import EX_CONFIG, Settings, load_settings_or_exit
-from app.core.db import Database
 from app.core.logging import configure_logging
-from app.documents.storage import build_document_files
-from app.exports.files import build_export_files
-from app.jobs.runtime import WorkerEnv
+from app.jobs.environment import worker_environment
 from app.jobs.worker import Worker
-
-log = structlog.get_logger("app.worker")
-
-
-def _worker_id() -> str:
-    return f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 
 
 async def run_worker(settings: Settings, stop: asyncio.Event) -> None:
-    database = Database.from_settings(settings)
-    await database.open(wait=True)
-    try:
-        async with httpx2.AsyncClient() as client:
-            provider: LLMProvider | None
-            try:
-                provider = build_provider(settings, client)
-            except LLMNotConfigured:
-                provider = None
-                log.warning(
-                    "worker.ai_not_configured",
-                    hint="Set LLM_PROVIDER (and GEMINI_API_KEY) or roadmap jobs will fail.",
-                )
-            env = WorkerEnv(
-                database=database,
-                settings=settings,
-                worker_id=_worker_id(),
-                provider=provider,
-                files=build_document_files(settings, client),
-                export_files=build_export_files(settings, client),
-            )
-            await Worker(env).run(stop)
-    finally:
-        await database.close()
+    async with worker_environment(settings) as env:
+        await Worker(env).run(stop)
 
 
 def _install_signal_handlers(loop: asyncio.AbstractEventLoop, stop: asyncio.Event) -> None:

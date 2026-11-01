@@ -15,6 +15,7 @@ from app.ai.factory import build_provider
 from app.ai.provider import LLMNotConfigured, LLMProvider
 from app.api import health
 from app.api import v1 as api_v1
+from app.api.job_wake import JobWakeMiddleware
 from app.core.config import Settings, load_settings_or_exit
 from app.core.db import Database
 from app.core.errors import register_exception_handlers
@@ -24,6 +25,7 @@ from app.core.request_context import REQUEST_ID_HEADER, RequestContextMiddleware
 from app.core.security import HttpJwksFetcher, JwksFetcher, TokenVerifier
 from app.documents.storage import DocumentFiles, build_document_files
 from app.exports.files import ExportFiles, build_export_files
+from app.jobs.wake import JobWake, build_job_wake
 
 _JWKS_HTTP_TIMEOUT_SECONDS = 3.0
 
@@ -35,6 +37,7 @@ def create_app(
     files: DocumentFiles | None = None,
     export_files: ExportFiles | None = None,
     provider: LLMProvider | None = None,
+    job_wake: JobWake | None = None,
 ) -> FastAPI:
     """Build the application.
 
@@ -42,7 +45,7 @@ def create_app(
     the public half of a locally generated key pair; tokens are still verified with real
     cryptography exactly as in production. ``files``, ``export_files`` and ``provider`` replace the
     configured file stores and model provider (tests pass temporary folders and a scripted
-    provider).
+    provider), and ``job_wake`` the way a queued job reaches the worker (ADR-052).
     """
     settings = settings or load_settings_or_exit()
     configure_logging(settings.log_level, json_logs=settings.json_logs)
@@ -111,6 +114,8 @@ def create_app(
         expose_headers=[REQUEST_ID_HEADER],
         max_age=600,
     )
+    # Wakes the worker once a request that queued a job has committed it (ADR-052).
+    app.add_middleware(JobWakeMiddleware, wake=job_wake or build_job_wake(settings))
     # Added last = outermost, so preflight responses and CORS rejections are also correlated.
     app.add_middleware(RequestContextMiddleware)
 

@@ -34,11 +34,8 @@ describe("parsePublicEnv", () => {
     expect(env.NEXT_PUBLIC_SUPABASE_URL).toBeUndefined();
   });
 
-  it("requires an explicit API URL when defaults are not allowed (production)", () => {
-    expect(() => parsePublicEnv({ ...SUPABASE }, false)).toThrow(EnvValidationError);
-    expect(() => parsePublicEnv({ ...SUPABASE }, false)).toThrow(
-      /NEXT_PUBLIC_API_BASE_URL: is required/,
-    );
+  it("leaves the public API URL optional in production (the browser never calls the API)", () => {
+    expect(parsePublicEnv({ ...SUPABASE }, false).NEXT_PUBLIC_API_BASE_URL).toBeUndefined();
   });
 
   it("strips trailing slashes so paths can be appended safely", () => {
@@ -153,6 +150,22 @@ describe("parseServerEnv", () => {
 
     expect(env.API_INTERNAL_BASE_URL).toBe("http://api:8000");
     expect(env.NEXT_PUBLIC_API_BASE_URL).toBe("http://localhost:8000");
+  });
+
+  it("works with only the internal URL, as a Vercel service binding provides it", () => {
+    const env = parseServerEnv(
+      { ...production, API_INTERNAL_BASE_URL: "https://studypilot-api.internal/" },
+      false,
+    );
+
+    expect(env.API_INTERNAL_BASE_URL).toBe("https://studypilot-api.internal");
+    expect(env.NEXT_PUBLIC_API_BASE_URL).toBeUndefined();
+  });
+
+  it("requires some API URL for server-side calls in production", () => {
+    expect(() => parseServerEnv({ ...production }, false)).toThrow(
+      /API_INTERNAL_BASE_URL: is required \(or NEXT_PUBLIC_API_BASE_URL\)/,
+    );
   });
 
   it("reports an invalid internal URL", () => {

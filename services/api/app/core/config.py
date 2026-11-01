@@ -51,6 +51,13 @@ class DocumentStorageName(StrEnum):
     LOCAL = "local"  # a folder on this machine: local development and tests, refused in production
 
 
+class JobWakeName(StrEnum):
+    """How a queued job reaches a worker (ADR-052)."""
+
+    NONE = "none"  # a long-running worker process polls the database (``python -m app.worker``)
+    VERCEL_QUEUE = "vercel_queue"  # a Vercel Queues message starts a bounded run of the worker
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -182,6 +189,10 @@ class Settings(BaseSettings):
     job_retry_base_seconds: float = Field(default=5.0, ge=0, le=600)
     worker_poll_seconds: float = Field(default=2.0, gt=0, le=60)
     worker_concurrency: int = Field(default=1, ge=1, le=8)
+    job_wake: JobWakeName = JobWakeName.NONE
+    # A bounded run (JOB_WAKE=vercel_queue) starts new jobs only during this many seconds, so the
+    # last job it starts can still finish inside the platform's limit (300 s on Vercel Hobby).
+    job_drain_seconds: float = Field(default=120.0, gt=0, le=780)
 
     @field_validator("supabase_publishable_key", mode="before")
     @classmethod
